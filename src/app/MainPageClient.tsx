@@ -1,4 +1,3 @@
-```typescript
 "use client";
 
 import { useEffect, useState } from "react";
@@ -121,11 +120,16 @@ export default function MainPageClient() {
 
   // Cargar administraciones
   useEffect(() => {
+    // Si el filtro es Ayuno/Desayuno, se carga Ayuno y Desayuno
+    const rangesToQuery = timeRangeFilter === "AYUNO/DESAYUNO" ? ["AYUNO", "DESAYUNO"] : [timeRangeFilter];
+    
+    // Se utiliza un filtro `where('timeRange', 'in', rangesToQuery)` para buscar en múltiples rangos
     const q = query(
       collection(db, "administrations"),
       where("date", "==", dateFilter),
-      where("timeRange", "==", timeRangeFilter)
+      where("timeRange", "in", rangesToQuery)
     );
+
     return onSnapshot(q, (snapshot) => {
       setAdministrations(
         snapshot.docs.map((doc) => mapDocToTypedObject<Administration>(doc))
@@ -145,6 +149,7 @@ export default function MainPageClient() {
 
   const handleGiven = async (student: Student, med: Medication) => {
     try {
+      // El timeRange que se guarda es el que está en el filtro
       await addDoc(collection(db, "administrations"), {
         studentId: student.id,
         studentFullNameSortable: `${student.firstSurname} ${student.secondSurname}, ${student.firstName}`,
@@ -152,7 +157,7 @@ export default function MainPageClient() {
         medicationName: med.medicationName,
         dosage: med.dosage,
         date: dateFilter,
-        timeRange: timeRangeFilter,
+        timeRange: timeRangeFilter, // Se usa el valor del filtro, que ahora incluye 'AYUNO/DESAYUNO'
         status: "GIVEN",
         givenByUid: "test-uid",
         createdAt: serverTimestamp(),
@@ -170,13 +175,12 @@ export default function MainPageClient() {
   };
 
   const filteredStudents = students.filter((s) => {
-    // Si el filtro es Ayuno/Desayuno, verifica ambos
-    const filterRanges = timeRangeFilter === "AYUNO/DESAYUNO" ? ["AYUNO", "DESAYUNO"] : [timeRangeFilter];
-
     const medsForStudent = medications.filter(
       (m) =>
         m.studentId === s.id &&
-        m.timeRanges.some(tr => filterRanges.includes(tr)) &&
+        (timeRangeFilter === "AYUNO/DESAYUNO"
+          ? m.timeRanges.some((tr) => ["AYUNO", "DESAYUNO"].includes(tr))
+          : m.timeRanges.includes(timeRangeFilter)) &&
         dateFilter >= m.startDate &&
         dateFilter <= m.endDate
     );
@@ -191,11 +195,12 @@ export default function MainPageClient() {
   });
 
   const getMedicationsForStudent = (studentId: string) => {
-    const filterRanges = timeRangeFilter === "AYUNO/DESAYUNO" ? ["AYUNO", "DESAYUNO"] : [timeRangeFilter];
     return medications.filter(
       (m) =>
         m.studentId === studentId &&
-        m.timeRanges.some(tr => filterRanges.includes(tr)) &&
+        (timeRangeFilter === "AYUNO/DESAYUNO"
+          ? m.timeRanges.some((tr) => ["AYUNO", "DESAYUNO"].includes(tr))
+          : m.timeRanges.includes(timeRangeFilter)) &&
         dateFilter >= m.startDate &&
         dateFilter <= m.endDate
     );
@@ -503,7 +508,10 @@ export default function MainPageClient() {
                     (a) =>
                       a.studentId === s.id &&
                       a.medicationId === med.id &&
-                      a.status === "GIVEN"
+                      a.status === "GIVEN" &&
+                      (timeRangeFilter === "AYUNO/DESAYUNO"
+                        ? ["AYUNO", "DESAYUNO"].includes(a.timeRange)
+                        : a.timeRange === timeRangeFilter)
                   );
                   return (
                     <div
@@ -571,7 +579,10 @@ export default function MainPageClient() {
                   (a) =>
                     a.studentId === selectedStudent.id &&
                     a.medicationId === med.id &&
-                    a.status === "GIVEN"
+                    a.status === "GIVEN" &&
+                    (timeRangeFilter === "AYUNO/DESAYUNO"
+                      ? ["AYUNO", "DESAYUNO"].includes(a.timeRange)
+                      : a.timeRange === timeRangeFilter)
                 );
                 return (
                   <div
