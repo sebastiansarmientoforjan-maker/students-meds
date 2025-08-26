@@ -114,6 +114,7 @@ export default function MainPageClient() {
   useEffect(() => {
     const q = query(collection(db, "students"), where("active", "==", true));
     return onSnapshot(q, (snapshot) => {
+      console.log(`Documentos recibidos: ${snapshot.docs.length}`);
       setStudents(snapshot.docs.map((doc) => mapDocToTypedObject<Student>(doc)));
     });
   }, []);
