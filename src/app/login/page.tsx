@@ -17,7 +17,7 @@ export default function LoginPage() {
       setError("");
       // Redirige a la página principal
       window.location.href = "/app";
-    } catch (err: any) {
+    } catch (err: unknown) {
       setError(err.message); // Muestra error si algo falla
     }
   };

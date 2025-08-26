@@ -8,10 +8,13 @@ import {
   getDocs,
   addDoc,
   serverTimestamp,
+  QueryDocumentSnapshot,
+  DocumentData,
 } from "firebase/firestore";
 import { db, auth } from "@/lib/firebase";
 import format from "date-fns/format";
 
+// Definimos los tipos de datos para las colecciones de Firestore
 type ExtraDose = {
   id: string;
   studentId: string;
@@ -22,20 +25,20 @@ type ExtraDose = {
   timeRange: string;
   status: string;
   notes?: string;
-  createdAt?: any;
+  createdAt?: DocumentData;
 };
 
 type AdminRec = {
   id: string;
   studentId: string;
   studentFullNameSortable: string;
-  medId?: string;
+  medId?: string | null;
   date: string;
   timeRange: string;
   status: string;
   givenByUid?: string;
   dosage?: string;
-  createdAt?: any;
+  createdAt?: DocumentData;
 };
 
 export default function DayView() {
@@ -56,6 +59,11 @@ export default function DayView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [date, timeRange, statusFilter]);
 
+  // Función genérica para mapear un documento de Firestore a un tipo específico
+  const mapDocToType = <T,>(doc: QueryDocumentSnapshot<DocumentData, DocumentData>): T => {
+    return { id: doc.id, ...doc.data() } as T;
+  };
+
   async function fetchAll() {
     setLoading(true);
     setMsg(null);
@@ -68,7 +76,7 @@ export default function DayView() {
       if (statusFilter !== "ALL") extraQConstraints.push(where("status", "==", statusFilter));
       const extraQ = query(collection(db, "extraDoses"), ...extraQConstraints);
       const extraSnap = await getDocs(extraQ);
-      const extras: ExtraDose[] = extraSnap.docs.map(d => ({ id: d.id, ...(d.data() as any) }));
+      const extras: ExtraDose[] = extraSnap.docs.map(doc => mapDocToType<ExtraDose>(doc));
 
       // 2) administrations query
       const adminQConstraints: any[] = [
@@ -78,11 +86,11 @@ export default function DayView() {
       if (statusFilter !== "ALL") adminQConstraints.push(where("status", "==", statusFilter));
       const adminQ = query(collection(db, "administrations"), ...adminQConstraints);
       const adminSnap = await getDocs(adminQ);
-      const admins: AdminRec[] = adminSnap.docs.map(d => ({ id: d.id, ...(d.data() as any) }));
+      const admins: AdminRec[] = adminSnap.docs.map(doc => mapDocToType<AdminRec>(doc));
 
       setExtraDoses(extras);
       setAdministrations(admins);
-    } catch (err: any) {
+    } catch (err: unknown) { // Usamos 'unknown' y comprobamos el tipo
       console.error("Fetch error:", err);
       setMsg("Error al leer datos. Revisa consola.");
     } finally {
@@ -90,13 +98,13 @@ export default function DayView() {
     }
   }
 
-  // Crear una administración (marcar Given) — se usa para probar la función
+  // Crear una administración (marcar Given)
   async function createAdministrationFromExtra(extra: ExtraDose) {
     try {
       setMsg("Registrando administración...");
       await addDoc(collection(db, "administrations"), {
         studentId: extra.studentId,
-        studentFullNameSortable: extra.studentNameSnapshot.replace(", ", ", ").trim(), // ya está en formato Pérez Gómez, Juan
+        studentFullNameSortable: extra.studentNameSnapshot.trim(),
         medId: null,
         date: extra.date,
         timeRange: extra.timeRange,
@@ -113,7 +121,7 @@ export default function DayView() {
     }
   }
 
-  // Crear administration manual (desde lista vacía) - ejemplo genérico
+  // Crear administration manual (desde lista vacía)
   async function createAdministrationManual() {
     try {
       setMsg("Registrando administración manual...");
@@ -170,7 +178,7 @@ export default function DayView() {
           <label className="block text-sm">Filtro estado</label>
           <select
             value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value as any)}
+            onChange={(e) => setStatusFilter(e.target.value as "ALL" | "GIVEN" | "NO_SHOW")}
             className="border p-2 rounded"
           >
             <option value="ALL">Todos</option>
@@ -208,7 +216,7 @@ export default function DayView() {
           <h2 className="text-lg font-semibold mb-2">Extra Doses ({extraDoses.length})</h2>
           {extraDoses.length === 0 && <div className="text-sm text-gray-500">No hay extra doses para esa fecha/rango.</div>}
           <ul className="space-y-2">
-            {extraDoses.map(ed => (
+            {extraDoses.map((ed) => (
               <li key={ed.id} className="p-3 border rounded flex justify-between items-center">
                 <div>
                   <div className="font-medium">{ed.studentNameSnapshot}</div>
@@ -233,7 +241,7 @@ export default function DayView() {
           <h2 className="text-lg font-semibold mb-2">Administrations ({administrations.length})</h2>
           {administrations.length === 0 && <div className="text-sm text-gray-500">No hay administraciones registradas para esa fecha/rango.</div>}
           <ul className="space-y-2">
-            {administrations.map(a => (
+            {administrations.map((a) => (
               <li key={a.id} className="p-3 border rounded">
                 <div className="font-medium">{a.studentFullNameSortable}</div>
                 <div className="text-sm">{a.dosage || "—"} — {a.status}</div>

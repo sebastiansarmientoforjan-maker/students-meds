@@ -8,8 +8,49 @@ import {
   onSnapshot,
   addDoc,
   serverTimestamp,
+  DocumentData,
+  QueryDocumentSnapshot,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+
+// Definimos los tipos para la base de datos para evitar 'any'
+interface Student {
+  id: string;
+  firstName: string;
+  firstSurname: string;
+  secondSurname: string;
+  active: boolean;
+  createdAt: any; // Opcional, puedes usar Firestore's Timestamp si lo deseas
+}
+
+interface Medication {
+  id: string;
+  studentId: string;
+  medicationName: string;
+  dosage: string;
+  timeRanges: string[];
+  notes: string;
+  startDate: string;
+  endDate: string;
+  active: boolean;
+  createdAt: any; // Opcional
+  hour?: string;
+}
+
+interface Administration {
+  id: string;
+  studentId: string;
+  studentFullNameSortable: string;
+  medicationId: string;
+  medicationName: string;
+  dosage: string;
+  date: string;
+  timeRange: string;
+  status: "GIVEN" | "NOSHOW" | "PENDING";
+  givenByUid: string;
+  createdAt: any; // Opcional
+  hour?: string;
+}
 
 type MedicationForm = {
   medicationName: string;
@@ -22,9 +63,9 @@ type MedicationForm = {
 };
 
 export default function MainPageClient() {
-  const [students, setStudents] = useState<any[]>([]);
-  const [administrations, setAdministrations] = useState<any[]>([]);
-  const [medications, setMedications] = useState<any[]>([]);
+  const [students, setStudents] = useState<Student[]>([]);
+  const [administrations, setAdministrations] = useState<Administration[]>([]);
+  const [medications, setMedications] = useState<Medication[]>([]);
   const [dateFilter, setDateFilter] = useState<string>(
     new Date().toISOString().split("T")[0]
   );
@@ -32,7 +73,7 @@ export default function MainPageClient() {
   const [statusFilter, setStatusFilter] = useState<"ALL" | "GIVEN" | "NOSHOW">(
     "ALL"
   );
-  const [selectedStudent, setSelectedStudent] = useState<any | null>(null);
+  const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [showExtraMedForm, setShowExtraMedForm] = useState(false);
   const [formData, setFormData] = useState({
@@ -52,11 +93,19 @@ export default function MainPageClient() {
     date: dateFilter,
   });
 
+  // Función para convertir un documento de Firestore a un objeto tipado
+  const mapDocToTypedObject = <T,>(
+    doc: QueryDocumentSnapshot<DocumentData, DocumentData>
+  ) => ({
+    id: doc.id,
+    ...doc.data(),
+  } as T);
+
   // Cargar estudiantes activos
   useEffect(() => {
     const q = query(collection(db, "students"), where("active", "==", true));
     return onSnapshot(q, (snapshot) => {
-      setStudents(snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })));
+      setStudents(snapshot.docs.map((doc) => mapDocToTypedObject<Student>(doc)));
     });
   }, []);
 
@@ -69,7 +118,7 @@ export default function MainPageClient() {
     );
     return onSnapshot(q, (snapshot) => {
       setAdministrations(
-        snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }))
+        snapshot.docs.map((doc) => mapDocToTypedObject<Administration>(doc))
       );
     });
   }, [dateFilter, timeRangeFilter]);
@@ -78,11 +127,13 @@ export default function MainPageClient() {
   useEffect(() => {
     const q = query(collection(db, "medications"));
     return onSnapshot(q, (snapshot) => {
-      setMedications(snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })));
+      setMedications(
+        snapshot.docs.map((doc) => mapDocToTypedObject<Medication>(doc))
+      );
     });
   }, []);
 
-  const handleGiven = async (student: any, med: any) => {
+  const handleGiven = async (student: Student, med: Medication) => {
     try {
       await addDoc(collection(db, "administrations"), {
         studentId: student.id,
