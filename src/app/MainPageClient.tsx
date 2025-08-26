@@ -1,3 +1,13 @@
+Para combinar los filtros "Ayuno" y "Desayuno", necesitas modificar dos partes principales del código:
+
+1.  **El `select` de los filtros**: Debes cambiar la opción de "Ayuno" para que su valor sea "AYUNO/DESAYUNO". Esto es lo que el usuario verá y seleccionará.
+2.  **La lógica de filtrado**: En la función que filtra los estudiantes (`filteredStudents`), debes ajustar la condición para que incluya tanto "AYUNO" como "DESAYUNO" cuando el filtro seleccionado sea "AYUNO/DESAYUNO".
+
+A continuación, se presenta el código modificado que implementa esta funcionalidad.
+
+-----
+
+```typescript
 "use client";
 
 import { useEffect, useState } from "react";
@@ -75,7 +85,7 @@ export default function MainPageClient() {
   const [dateFilter, setDateFilter] = useState<string>(
     new Date().toISOString().split("T")[0]
   );
-  const [timeRangeFilter, setTimeRangeFilter] = useState<string>("DESAYUNO");
+  const [timeRangeFilter, setTimeRangeFilter] = useState<string>("AYUNO/DESAYUNO");
   const [statusFilter, setStatusFilter] = useState<"ALL" | "GIVEN" | "NOSHOW">(
     "ALL"
   );
@@ -169,10 +179,13 @@ export default function MainPageClient() {
   };
 
   const filteredStudents = students.filter((s) => {
+    // Si el filtro es Ayuno/Desayuno, verifica ambos
+    const filterRanges = timeRangeFilter === "AYUNO/DESAYUNO" ? ["AYUNO", "DESAYUNO"] : [timeRangeFilter];
+
     const medsForStudent = medications.filter(
       (m) =>
         m.studentId === s.id &&
-        m.timeRanges.includes(timeRangeFilter) &&
+        m.timeRanges.some(tr => filterRanges.includes(tr)) &&
         dateFilter >= m.startDate &&
         dateFilter <= m.endDate
     );
@@ -187,10 +200,11 @@ export default function MainPageClient() {
   });
 
   const getMedicationsForStudent = (studentId: string) => {
+    const filterRanges = timeRangeFilter === "AYUNO/DESAYUNO" ? ["AYUNO", "DESAYUNO"] : [timeRangeFilter];
     return medications.filter(
       (m) =>
         m.studentId === studentId &&
-        m.timeRanges.includes(timeRangeFilter) &&
+        m.timeRanges.some(tr => filterRanges.includes(tr)) &&
         dateFilter >= m.startDate &&
         dateFilter <= m.endDate
     );
@@ -449,8 +463,7 @@ export default function MainPageClient() {
           onChange={(e) => setTimeRangeFilter(e.target.value)}
           className="border p-2 rounded-lg shadow-sm"
         >
-          <option value="AYUNO">Ayuno</option>
-          <option value="DESAYUNO">Desayuno</option>
+          <option value="AYUNO/DESAYUNO">Ayuno/Desayuno</option>
           <option value="ALMUERZO">Almuerzo</option>
           <option value="CENA">Cena</option>
           <option value="SOS">SOS</option>
@@ -844,3 +857,4 @@ export default function MainPageClient() {
     </div>
   );
 }
+```
