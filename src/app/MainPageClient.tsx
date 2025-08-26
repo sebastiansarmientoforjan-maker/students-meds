@@ -172,6 +172,18 @@ export default function MainPageClient() {
     }
   };
 
+  const handleDeactivateStudent = async (studentId: string) => {
+    try {
+        const studentRef = doc(db, "students", studentId);
+        await updateDoc(studentRef, {
+            active: false,
+        });
+        console.log("Estudiante desactivado con éxito:", studentId);
+    } catch (err) {
+        console.error("Error al desactivar al estudiante:", err);
+    }
+  };
+
   const filteredStudents = students.filter((s) => {
     const medsForStudent = medications.filter(
       (m) =>
@@ -447,12 +459,16 @@ export default function MainPageClient() {
       {/* Filtros */}
       <div className="flex gap-2 flex-wrap mb-6">
         <input
+          id="dateFilter"
+          name="dateFilter"
           type="date"
           value={dateFilter}
           onChange={(e) => setDateFilter(e.target.value)}
           className="border p-2 rounded-lg shadow-sm"
         />
         <select
+          id="timeRangeFilter"
+          name="timeRangeFilter"
           value={timeRangeFilter}
           onChange={(e) => setTimeRangeFilter(e.target.value)}
           className="border p-2 rounded-lg shadow-sm"
@@ -543,16 +559,27 @@ export default function MainPageClient() {
                     );
                   })}
                 </div>
-                {/* Botón de editar */}
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation(); // Evita que el modal de información se abra
-                    handleEditStudent(s);
-                  }}
-                  className="mt-2 text-sm text-blue-500 hover:text-blue-700"
-                >
-                  Editar
-                </button>
+                {/* BOTONES DE ACCIÓN: EDITAR Y ELIMINAR */}
+                <div className="flex gap-2 mt-2">
+                    <button
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            handleEditStudent(s);
+                        }}
+                        className="text-sm text-blue-500 hover:text-blue-700"
+                    >
+                        Editar
+                    </button>
+                    <button
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeactivateStudent(s.id);
+                        }}
+                        className="text-sm text-red-500 hover:text-red-700"
+                    >
+                        Eliminar
+                    </button>
+                </div>
               </div>
             ))
         )}
@@ -626,6 +653,8 @@ export default function MainPageClient() {
             </h2>
             <div className="space-y-2">
               <input
+                id="firstName"
+                name="firstName"
                 placeholder="Nombre"
                 value={formData.firstName}
                 onChange={(e) =>
@@ -634,6 +663,8 @@ export default function MainPageClient() {
                 className="border p-2 rounded w-full"
               />
               <input
+                id="firstSurname"
+                name="firstSurname"
                 placeholder="Primer Apellido"
                 value={formData.firstSurname}
                 onChange={(e) =>
@@ -642,6 +673,8 @@ export default function MainPageClient() {
                 className="border p-2 rounded w-full"
               />
               <input
+                id="secondSurname"
+                name="secondSurname"
                 placeholder="Segundo Apellido"
                 value={formData.secondSurname}
                 onChange={(e) =>
@@ -653,6 +686,8 @@ export default function MainPageClient() {
               {formData.medicationsToAdd.map((med, idx) => (
                 <div key={idx} className="border p-2 rounded space-y-2">
                   <input
+                    id={`medicationName-${idx}`}
+                    name={`medicationName-${idx}`}
                     placeholder="Medicamento"
                     value={med.medicationName}
                     onChange={(e) => {
@@ -663,6 +698,8 @@ export default function MainPageClient() {
                     className="border p-2 rounded w-full"
                   />
                   <input
+                    id={`dosage-${idx}`}
+                    name={`dosage-${idx}`}
                     placeholder="Dosis"
                     value={med.dosage}
                     onChange={(e) => {
@@ -697,6 +734,8 @@ export default function MainPageClient() {
                     )}
                   </div>
                   <input
+                    id={`startDate-${idx}`}
+                    name={`startDate-${idx}`}
                     type="date"
                     value={med.startDate}
                     onChange={(e) => {
@@ -707,6 +746,8 @@ export default function MainPageClient() {
                     className="border p-2 rounded w-full"
                   />
                   <input
+                    id={`endDate-${idx}`}
+                    name={`endDate-${idx}`}
                     type="date"
                     value={med.endDate}
                     onChange={(e) => {
@@ -717,6 +758,8 @@ export default function MainPageClient() {
                     className="border p-2 rounded w-full"
                   />
                   <textarea
+                    id={`notes-${idx}`}
+                    name={`notes-${idx}`}
                     placeholder="Observaciones"
                     value={med.notes}
                     onChange={(e) => {
@@ -771,6 +814,8 @@ export default function MainPageClient() {
             <h2 className="text-lg font-bold mb-4">Agregar Medicamento Extra</h2>
 
             <input
+              id="extraFirstName"
+              name="extraFirstName"
               placeholder="Nombre del Estudiante"
               value={extraMedForm.firstName}
               onChange={(e) =>
@@ -779,6 +824,8 @@ export default function MainPageClient() {
               className="border p-2 rounded w-full mb-2"
             />
             <input
+              id="extraFirstSurname"
+              name="extraFirstSurname"
               placeholder="Primer Apellido"
               value={extraMedForm.firstSurname}
               onChange={(e) =>
@@ -787,6 +834,8 @@ export default function MainPageClient() {
               className="border p-2 rounded w-full mb-2"
             />
             <input
+              id="extraMedicationName"
+              name="extraMedicationName"
               placeholder="Medicamento"
               value={extraMedForm.medicationName}
               onChange={(e) =>
@@ -795,6 +844,8 @@ export default function MainPageClient() {
               className="border p-2 rounded w-full mb-2"
             />
             <input
+              id="extraDosage"
+              name="extraDosage"
               placeholder="Dosis"
               value={extraMedForm.dosage}
               onChange={(e) =>
@@ -803,6 +854,8 @@ export default function MainPageClient() {
               className="border p-2 rounded w-full mb-2"
             />
             <input
+              id="extraHour"
+              name="extraHour"
               type="time"
               value={extraMedForm.hour}
               onChange={(e) =>
@@ -811,6 +864,8 @@ export default function MainPageClient() {
               className="border p-2 rounded w-full mb-2"
             />
             <input
+              id="extraDate"
+              name="extraDate"
               type="date"
               value={extraMedForm.date}
               onChange={(e) =>
@@ -819,6 +874,8 @@ export default function MainPageClient() {
               className="border p-2 rounded w-full mb-2"
             />
             <textarea
+              id="extraNotes"
+              name="extraNotes"
               placeholder="Observaciones"
               value={extraMedForm.notes}
               onChange={(e) =>
