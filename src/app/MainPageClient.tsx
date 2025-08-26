@@ -120,10 +120,8 @@ export default function MainPageClient() {
 
   // Cargar administraciones
   useEffect(() => {
-    // Si el filtro es Ayuno/Desayuno, se carga Ayuno y Desayuno
     const rangesToQuery = timeRangeFilter === "AYUNO/DESAYUNO" ? ["AYUNO", "DESAYUNO"] : [timeRangeFilter];
     
-    // Se utiliza un filtro `where('timeRange', 'in', rangesToQuery)` para buscar en múltiples rangos
     const q = query(
       collection(db, "administrations"),
       where("date", "==", dateFilter),
@@ -149,7 +147,6 @@ export default function MainPageClient() {
 
   const handleGiven = async (student: Student, med: Medication) => {
     try {
-      // El timeRange que se guarda es el que está en el filtro
       await addDoc(collection(db, "administrations"), {
         studentId: student.id,
         studentFullNameSortable: `${student.firstSurname} ${student.secondSurname}, ${student.firstName}`,
@@ -157,7 +154,7 @@ export default function MainPageClient() {
         medicationName: med.medicationName,
         dosage: med.dosage,
         date: dateFilter,
-        timeRange: timeRangeFilter, // Se usa el valor del filtro, que ahora incluye 'AYUNO/DESAYUNO'
+        timeRange: timeRangeFilter, 
         status: "GIVEN",
         givenByUid: "test-uid",
         createdAt: serverTimestamp(),
@@ -493,68 +490,70 @@ export default function MainPageClient() {
             No hay estudiantes para mostrar.
           </div>
         ) : (
-          filteredStudents.map((s) => (
-            <div
-              key={s.id}
-              onClick={() => setSelectedStudent(s)}
-              className="bg-white rounded-2xl shadow-md p-4 cursor-pointer hover:shadow-lg transition"
-            >
-              <p className="font-semibold text-gray-800 mb-2">
-                {s.firstSurname} {s.secondSurname}, {s.firstName}
-              </p>
-              <div className="space-y-1">
-                {getMedicationsForStudent(s.id).map((med) => {
-                  const wasGiven = administrations.some(
-                    (a) =>
-                      a.studentId === s.id &&
-                      a.medicationId === med.id &&
-                      a.status === "GIVEN" &&
-                      (timeRangeFilter === "AYUNO/DESAYUNO"
-                        ? ["AYUNO", "DESAYUNO"].includes(a.timeRange)
-                        : a.timeRange === timeRangeFilter)
-                  );
-                  return (
-                    <div
-                      key={med.id}
-                      className={`flex justify-between items-center border rounded-lg px-3 py-1 ${
-                        wasGiven
-                          ? "bg-green-100 border-green-400"
-                          : "bg-gray-50 border-gray-200"
-                      }`}
-                    >
-                      <div className="flex flex-col">
-                        <span className="font-medium">{med.medicationName}</span>
-                        <span className="text-sm text-gray-500">{med.dosage}</span>
-                      </div>
-                      {!wasGiven ? (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleGiven(s, med);
-                          }}
-                          className="bg-green-500 text-white px-3 py-1 rounded-lg"
-                        >
-                          Given
-                        </button>
-                      ) : (
-                        <span className="text-green-700 font-semibold">✅ Given</span>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-              {/* Botón de editar */}
-              <button
-                onClick={(e) => {
-                  e.stopPropagation(); // Evita que el modal de información se abra
-                  handleEditStudent(s);
-                }}
-                className="mt-2 text-sm text-blue-500 hover:text-blue-700"
+          [...filteredStudents]
+            .sort((a, b) => a.firstSurname.localeCompare(b.firstSurname))
+            .map((s) => (
+              <div
+                key={s.id}
+                onClick={() => setSelectedStudent(s)}
+                className="bg-white rounded-2xl shadow-md p-4 cursor-pointer hover:shadow-lg transition"
               >
-                Editar
-              </button>
-            </div>
-          ))
+                <p className="font-semibold text-gray-800 mb-2">
+                  {s.firstSurname} {s.secondSurname}, {s.firstName}
+                </p>
+                <div className="space-y-1">
+                  {getMedicationsForStudent(s.id).map((med) => {
+                    const wasGiven = administrations.some(
+                      (a) =>
+                        a.studentId === s.id &&
+                        a.medicationId === med.id &&
+                        a.status === "GIVEN" &&
+                        (timeRangeFilter === "AYUNO/DESAYUNO"
+                          ? ["AYUNO", "DESAYUNO"].includes(a.timeRange)
+                          : a.timeRange === timeRangeFilter)
+                    );
+                    return (
+                      <div
+                        key={med.id}
+                        className={`flex justify-between items-center border rounded-lg px-3 py-1 ${
+                          wasGiven
+                            ? "bg-green-100 border-green-400"
+                            : "bg-gray-50 border-gray-200"
+                        }`}
+                      >
+                        <div className="flex flex-col">
+                          <span className="font-medium">{med.medicationName}</span>
+                          <span className="text-sm text-gray-500">{med.dosage}</span>
+                        </div>
+                        {!wasGiven ? (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleGiven(s, med);
+                            }}
+                            className="bg-green-500 text-white px-3 py-1 rounded-lg"
+                          >
+                            Given
+                          </button>
+                        ) : (
+                          <span className="text-green-700 font-semibold">✅ Given</span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+                {/* Botón de editar */}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation(); // Evita que el modal de información se abra
+                    handleEditStudent(s);
+                  }}
+                  className="mt-2 text-sm text-blue-500 hover:text-blue-700"
+                >
+                  Editar
+                </button>
+              </div>
+            ))
         )}
       </div>
 
