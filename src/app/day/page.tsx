@@ -13,7 +13,7 @@ import {
   QueryConstraint, // Importamos QueryConstraint para un tipado correcto
 } from "firebase/firestore";
 import { db, auth } from "@/lib/firebase";
-import format from "date-fns/format";
+import {format} from "date-fns/format";
 
 // Definimos los tipos de datos para las colecciones de Firestore
 type ExtraDose = {
