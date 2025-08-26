@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { initializeApp } from 'firebase/app';
-import { getAuth, signInWithEmailAndPassword, signInWithCustomToken, onAuthStateChanged, signInAnonymously } from "firebase/auth";
+import { getAuth, signInWithEmailAndPassword, signInWithCustomToken, onAuthStateChanged, signInAnonymously, Auth } from "firebase/auth";
 
 // Asumimos que estas variables globales se proporcionan en el entorno
 declare const __firebase_config: string;
@@ -10,7 +10,8 @@ declare const __initial_auth_token: string;
 
 // Componente principal de la aplicación
 export default function App() {
-  const [authInstance, setAuthInstance] = useState(null);
+  // Especificamos el tipo explícitamente como Auth | null
+  const [authInstance, setAuthInstance] = useState<Auth | null>(null);
   const [loading, setLoading] = useState(true);
 
   // Inicializa Firebase y autentica al usuario al cargar la app
@@ -37,6 +38,7 @@ export default function App() {
           await signInAnonymously(auth);
         }
 
+        // Asignamos el objeto de autenticación a nuestro estado
         setAuthInstance(auth);
 
         // Retorna la función de limpieza para el listener
