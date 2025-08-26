@@ -1,12 +1,3 @@
-Para combinar los filtros "Ayuno" y "Desayuno", necesitas modificar dos partes principales del código:
-
-1.  **El `select` de los filtros**: Debes cambiar la opción de "Ayuno" para que su valor sea "AYUNO/DESAYUNO". Esto es lo que el usuario verá y seleccionará.
-2.  **La lógica de filtrado**: En la función que filtra los estudiantes (`filteredStudents`), debes ajustar la condición para que incluya tanto "AYUNO" como "DESAYUNO" cuando el filtro seleccionado sea "AYUNO/DESAYUNO".
-
-A continuación, se presenta el código modificado que implementa esta funcionalidad.
-
------
-
 ```typescript
 "use client";
 
