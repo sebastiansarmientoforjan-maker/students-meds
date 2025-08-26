@@ -1,50 +1,139 @@
-"use client"; // Necesario para componentes que usan estado
+import { useState, useEffect } from "react";
+import { initializeApp } from 'firebase/app';
+import { getAuth, signInWithEmailAndPassword, signInWithCustomToken, onAuthStateChanged } from "firebase/auth";
 
-import { useState } from "react";
-import { signInWithEmailAndPassword } from "firebase/auth";
-import { auth } from "@/lib/firebase";
+// Asumimos que estas variables globales se proporcionan en el entorno
+declare const __firebase_config: string;
+declare const __initial_auth_token: string;
 
-export default function LoginPage() {
-  const [email, setEmail] = useState("");      // Aquí escribes tu correo
-  const [password, setPassword] = useState(""); // Aquí escribes tu contraseña
-  const [error, setError] = useState("");       // Mensajes de error
+// Componente principal de la aplicación
+export default function App() {
+  const [auth, setAuth] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault(); // Evita que la página se recargue
+  // Inicializa Firebase y autentica al usuario al cargar la app
+  useEffect(() => {
+    async function initializeFirebase() {
+      try {
+        const firebaseConfig = JSON.parse(__firebase_config);
+        const app = initializeApp(firebaseConfig);
+        const authInstance = getAuth(app);
+        
+        onAuthStateChanged(authInstance, (user) => {
+          if (user) {
+            console.log("Usuario autenticado:", user.uid);
+          } else {
+            console.log("No hay usuario autenticado.");
+          }
+          setLoading(false);
+        });
+
+        if (typeof __initial_auth_token !== 'undefined') {
+          await signInWithCustomToken(authInstance, __initial_auth_token);
+        } else {
+          await signInAnonymously(authInstance);
+        }
+
+        setAuth(authInstance);
+
+      } catch (err) {
+        console.error("Error al inicializar Firebase o autenticar:", err);
+        setLoading(false);
+      }
+    }
+    initializeFirebase();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center min-h-screen bg-gray-100">
+        <div className="text-xl">Cargando...</div>
+      </div>
+    );
+  }
+
+  return (
+    <LoginPage auth={auth} />
+  );
+}
+
+// Componente de la página de inicio de sesión
+function LoginPage({ auth }) {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+
+  const handleLogin = async (e) => {
+    e.preventDefault();
+
+    // Verificamos si la instancia de auth está disponible
+    if (!auth) {
+      setError("Error: Firebase Auth no está disponible.");
+      return;
+    }
 
     try {
-      await signInWithEmailAndPassword(auth, email, password); // Login real
+      await signInWithEmailAndPassword(auth, email, password);
       setError("");
-      // Redirige a la página principal
+      // En una aplicación real, se usaría un enrutador (como Next.js Router)
       window.location.href = "/app";
-    } catch (err: unknown) {
-      setError(err.message); // Muestra error si algo falla
+    } catch (err) {
+      if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError("Ocurrió un error inesperado durante el inicio de sesión.");
+      }
     }
   };
 
   return (
-    <div className="flex justify-center items-center min-h-screen bg-gray-100">
-      <form onSubmit={handleLogin} className="p-6 bg-white shadow rounded space-y-4 w-96">
-        <h1 className="text-xl font-bold">Iniciar Sesión</h1>
-        <input
-          type="email"
-          placeholder="Email"
-          value={email}
-          onChange={e => setEmail(e.target.value)}
-          className="w-full border p-2 rounded"
-        />
-        <input
-          type="password"
-          placeholder="Contraseña"
-          value={password}
-          onChange={e => setPassword(e.target.value)}
-          className="w-full border p-2 rounded"
-        />
-        {error && <p className="text-red-500">{error}</p>}
-        <button type="submit" className="w-full bg-blue-500 text-white p-2 rounded">
-          Entrar
-        </button>
-      </form>
+    <div className="flex justify-center items-center min-h-screen bg-gray-100 font-sans">
+      <div className="w-full max-w-sm p-8 bg-white rounded-xl shadow-lg transform transition-all hover:scale-105">
+        <h1 className="text-3xl font-bold text-center text-gray-800 mb-6">Iniciar Sesión</h1>
+        <form onSubmit={handleLogin} className="space-y-6">
+          <div className="relative">
+            <input
+              type="email"
+              placeholder=" "
+              id="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="peer w-full p-3 pt-6 font-medium text-gray-900 bg-gray-50 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              required
+            />
+            <label
+              htmlFor="email"
+              className="absolute text-sm font-medium text-gray-500 transform duration-300 -translate-y-4 scale-75 top-3 left-3 origin-[0] peer-focus:text-blue-500 peer-placeholder-shown:scale-100 peer-placeholder-shown:translate-y-0 peer-focus:scale-75 peer-focus:-translate-y-4"
+            >
+              Email
+            </label>
+          </div>
+          <div className="relative">
+            <input
+              type="password"
+              placeholder=" "
+              id="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="peer w-full p-3 pt-6 font-medium text-gray-900 bg-gray-50 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              required
+            />
+            <label
+              htmlFor="password"
+              className="absolute text-sm font-medium text-gray-500 transform duration-300 -translate-y-4 scale-75 top-3 left-3 origin-[0] peer-focus:text-blue-500 peer-placeholder-shown:scale-100 peer-placeholder-shown:translate-y-0 peer-focus:scale-75 peer-focus:-translate-y-4"
+            >
+              Contraseña
+            </label>
+          </div>
+          {error && <p className="text-red-600 text-sm font-medium mt-2">{error}</p>}
+          <button
+            type="submit"
+            className="w-full bg-blue-600 text-white font-bold py-3 rounded-lg shadow-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition duration-300 ease-in-out"
+          >
+            Entrar
+          </button>
+        </form>
+      </div>
     </div>
   );
 }
