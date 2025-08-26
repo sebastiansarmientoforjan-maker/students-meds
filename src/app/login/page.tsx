@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { initializeApp } from 'firebase/app';
-import { getAuth, signInWithEmailAndPassword, signInWithCustomToken, onAuthStateChanged } from "firebase/auth";
+import { getAuth, signInWithEmailAndPassword, signInWithCustomToken, onAuthStateChanged, signInAnonymously } from "firebase/auth";
 
 // Asumimos que estas variables globales se proporcionan en el entorno
 declare const __firebase_config: string;
@@ -10,7 +10,7 @@ declare const __initial_auth_token: string;
 
 // Componente principal de la aplicación
 export default function App() {
-  const [auth, setAuth] = useState(null);
+  const [authInstance, setAuthInstance] = useState(null);
   const [loading, setLoading] = useState(true);
 
   // Inicializa Firebase y autentica al usuario al cargar la app
@@ -19,9 +19,10 @@ export default function App() {
       try {
         const firebaseConfig = JSON.parse(__firebase_config);
         const app = initializeApp(firebaseConfig);
-        const authInstance = getAuth(app);
+        const auth = getAuth(app);
         
-        onAuthStateChanged(authInstance, (user) => {
+        // Listener para el estado de autenticación
+        const unsubscribe = onAuthStateChanged(auth, (user) => {
           if (user) {
             console.log("Usuario autenticado:", user.uid);
           } else {
@@ -31,12 +32,15 @@ export default function App() {
         });
 
         if (typeof __initial_auth_token !== 'undefined') {
-          await signInWithCustomToken(authInstance, __initial_auth_token);
+          await signInWithCustomToken(auth, __initial_auth_token);
         } else {
-          await signInAnonymously(authInstance);
+          await signInAnonymously(auth);
         }
 
-        setAuth(authInstance);
+        setAuthInstance(auth);
+
+        // Retorna la función de limpieza para el listener
+        return () => unsubscribe();
 
       } catch (err) {
         console.error("Error al inicializar Firebase o autenticar:", err);
@@ -55,7 +59,7 @@ export default function App() {
   }
 
   return (
-    <LoginPage auth={auth} />
+    <LoginPage auth={authInstance} />
   );
 }
 
@@ -68,7 +72,6 @@ function LoginPage({ auth }) {
   const handleLogin = async (e) => {
     e.preventDefault();
 
-    // Verificamos si la instancia de auth está disponible
     if (!auth) {
       setError("Error: Firebase Auth no está disponible.");
       return;
@@ -77,7 +80,6 @@ function LoginPage({ auth }) {
     try {
       await signInWithEmailAndPassword(auth, email, password);
       setError("");
-      // En una aplicación real, se usaría un enrutador (como Next.js Router)
       window.location.href = "/app";
     } catch (err) {
       if (err instanceof Error) {
