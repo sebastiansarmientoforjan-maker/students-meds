@@ -65,13 +65,18 @@ export default function App() {
   );
 }
 
+// Definimos explícitamente el tipo de las props del componente
+interface LoginPageProps {
+  auth: Auth | null;
+}
+
 // Componente de la página de inicio de sesión
-function LoginPage({ auth }) {
+function LoginPage({ auth }: LoginPageProps) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
 
-  const handleLogin = async (e) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!auth) {
