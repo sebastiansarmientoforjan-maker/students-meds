@@ -10,6 +10,7 @@ import {
   serverTimestamp,
   QueryDocumentSnapshot,
   DocumentData,
+  QueryConstraint, // Importamos QueryConstraint para un tipado correcto
 } from "firebase/firestore";
 import { db, auth } from "@/lib/firebase";
 import format from "date-fns/format";
@@ -69,28 +70,32 @@ export default function DayView() {
     setMsg(null);
     try {
       // 1) extraDoses query
-      const extraQConstraints: any[] = [
+      const extraQConstraints: QueryConstraint[] = [
         where("date", "==", date),
         where("timeRange", "==", timeRange),
       ];
-      if (statusFilter !== "ALL") extraQConstraints.push(where("status", "==", statusFilter));
+      if (statusFilter !== "ALL") {
+        extraQConstraints.push(where("status", "==", statusFilter));
+      }
       const extraQ = query(collection(db, "extraDoses"), ...extraQConstraints);
       const extraSnap = await getDocs(extraQ);
       const extras: ExtraDose[] = extraSnap.docs.map(doc => mapDocToType<ExtraDose>(doc));
 
       // 2) administrations query
-      const adminQConstraints: any[] = [
+      const adminQConstraints: QueryConstraint[] = [
         where("date", "==", date),
         where("timeRange", "==", timeRange),
       ];
-      if (statusFilter !== "ALL") adminQConstraints.push(where("status", "==", statusFilter));
+      if (statusFilter !== "ALL") {
+        adminQConstraints.push(where("status", "==", statusFilter));
+      }
       const adminQ = query(collection(db, "administrations"), ...adminQConstraints);
       const adminSnap = await getDocs(adminQ);
       const admins: AdminRec[] = adminSnap.docs.map(doc => mapDocToType<AdminRec>(doc));
 
       setExtraDoses(extras);
       setAdministrations(admins);
-    } catch (err: unknown) { // Usamos 'unknown' y comprobamos el tipo
+    } catch (err: unknown) {
       console.error("Fetch error:", err);
       setMsg("Error al leer datos. Revisa consola.");
     } finally {
