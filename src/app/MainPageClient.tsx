@@ -10,14 +10,15 @@ import {
   updateDoc,
   doc,
   serverTimestamp,
+  DocumentData,
+  QueryDocumentSnapshot,
   Timestamp,
   writeBatch,
-  getDocs,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import * as htmlToImage from "html-to-image";
 
-// Definimos los tipos para la base de datos
+// Definimos los tipos para la base de datos para evitar 'any'
 interface Student {
   id: string;
   firstName: string;
@@ -67,170 +68,336 @@ type MedicationForm = {
   hour?: string;
 };
 
-type ExtraMedForm = {
-  medicationName: string;
-  dosage: string;
-  notes: string;
-  timeRanges: string[];
-};
-
 export default function MainPageClient() {
   const [students, setStudents] = useState<Student[]>([]);
-  const [medications, setMedications] = useState<Medication[]>([]);
   const [administrations, setAdministrations] = useState<Administration[]>([]);
-  const [filteredStudents, setFilteredStudents] = useState<Student[]>([]);
-  const [dateFilter, setDateFilter] = useState(
+  const [medications, setMedications] = useState<Medication[]>([]);
+  const [dateFilter, setDateFilter] = useState<string>(
     new Date().toISOString().split("T")[0]
   );
-  const [timeRangeFilter, setTimeRangeFilter] = useState("AYUNO/DESAYUNO");
-  const [statusFilter, setStatusFilter] = useState<
-    "ALL" | "GIVEN" | "NOSHOW"
-  >("ALL");
+  const [timeRangeFilter, setTimeRangeFilter] = useState<string>("AYUNO/DESAYUNO");
+  const [statusFilter, setStatusFilter] = useState<"ALL" | "GIVEN" | "NOSHOW">(
+    "ALL"
+  );
+  const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [showExtraMedForm, setShowExtraMedForm] = useState(false);
-  const [editingStudentId, setEditingStudentId] = useState<string | null>(null);
-  const [formData, setFormData] = useState<{
-    firstName: string;
-    firstSurname: string;
-    secondSurname: string;
-    medicationsToAdd: MedicationForm[];
-  }>({
+  const [formData, setFormData] = useState({
     firstName: "",
     firstSurname: "",
     secondSurname: "",
-    medicationsToAdd: [],
+    medicationsToAdd: [] as MedicationForm[],
   });
-
-  const [extraMedForm, setExtraMedForm] = useState<ExtraMedForm>({
+  const [extraMedForm, setExtraMedForm] = useState({
+    firstName: "",
+    firstSurname: "",
     medicationName: "",
     dosage: "",
+    timeRanges: [] as string[],
     notes: "",
-    timeRanges: [],
+    hour: "",
+    date: dateFilter,
   });
 
-  const [showExtraMedsPopup, setShowExtraMedsPopup] = useState(false);
-  const [extraMedsStartDate, setExtraMedsStartDate] = useState("");
-  const [extraMedsEndDate, setExtraMedsEndDate] = useState("");
-  const [filteredExtraMeds, setFilteredExtraMeds] = useState<Administration[]>([]);
+  const [editingStudentId, setEditingStudentId] = useState<string | null>(null);
 
+  // Nuevo: Referencia para el elemento que queremos exportar
   const studentListRef = useRef<HTMLDivElement>(null);
 
+  const mapDocToTypedObject = <T,>(
+    doc: QueryDocumentSnapshot<DocumentData, DocumentData>
+  ) => ({
+    id: doc.id,
+    ...doc.data(),
+  } as T);
+
   useEffect(() => {
-    const studentsUnsubscribe = onSnapshot(
-      collection(db, "students"),
-      (snapshot) => {
-        const studentsData = snapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        })) as Student[];
-        setStudents(studentsData);
-      }
-    );
-
-    const medicationsUnsubscribe = onSnapshot(
-      collection(db, "medications"),
-      (snapshot) => {
-        const medicationsData = snapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        })) as Medication[];
-        setMedications(medicationsData);
-      }
-    );
-
-    const administrationsUnsubscribe = onSnapshot(
-      collection(db, "administrations"),
-      (snapshot) => {
-        const administrationsData = snapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        })) as Administration[];
-        setAdministrations(administrationsData);
-      }
-    );
-
-    return () => {
-      studentsUnsubscribe();
-      medicationsUnsubscribe();
-      administrationsUnsubscribe();
-    };
+    const q = query(collection(db, "students"), where("active", "==", true));
+    return onSnapshot(q, (snapshot) => {
+      setStudents(snapshot.docs.map((doc) => mapDocToTypedObject<Student>(doc)));
+    });
   }, []);
 
   useEffect(() => {
-    const newFilteredStudents = students.filter((student) => {
-      const studentMedications = medications.filter(
-        (med) =>
-          med.studentId === student.id &&
-          med.timeRanges.includes(timeRangeFilter.split("/")[0]) &&
-          new Date(dateFilter) >= new Date(med.startDate) &&
-          new Date(dateFilter) <= new Date(med.endDate)
+    const rangesToQuery = timeRangeFilter === "AYUNO/DESAYUNO" ? ["AYUNO", "DESAYUNO"] : [timeRangeFilter];
+    
+    const q = query(
+      collection(db, "administrations"),
+      where("date", "==", dateFilter),
+      where("timeRange", "in", rangesToQuery)
+    );
+
+    return onSnapshot(q, (snapshot) => {
+      setAdministrations(
+        snapshot.docs.map((doc) => mapDocToTypedObject<Administration>(doc))
       );
-
-      const hasExtraMeds = medications.some(
-        (med) =>
-          med.studentId === "" &&
-          med.timeRanges.includes(timeRangeFilter.split("/")[0]) &&
-          new Date(dateFilter) >= new Date(med.startDate) &&
-          new Date(dateFilter) <= new Date(med.endDate)
-      );
-
-      const studentHasMedicationForTimeRange =
-        studentMedications.length > 0 || hasExtraMeds;
-
-      if (!studentHasMedicationForTimeRange) {
-        return false;
-      }
-
-      const hasAdmin = administrations.some(
-        (admin) =>
-          admin.studentId === student.id &&
-          admin.date === dateFilter &&
-          admin.timeRange === timeRangeFilter &&
-          (statusFilter === "ALL" || admin.status === statusFilter)
-      );
-
-      return statusFilter === "ALL" || hasAdmin;
     });
+  }, [dateFilter, timeRangeFilter]);
 
-    setFilteredStudents(newFilteredStudents);
-  }, [students, medications, administrations, dateFilter, timeRangeFilter, statusFilter]);
+  useEffect(() => {
+    const q = query(collection(db, "medications"));
+    return onSnapshot(q, (snapshot) => {
+      setMedications(
+        snapshot.docs.map((doc) => mapDocToTypedObject<Medication>(doc))
+      );
+    });
+  }, []);
 
-  const handleCreateOrUpdateStudent = async () => {
-    if (!formData.firstName || !formData.firstSurname) {
-      alert("Por favor, complete los campos obligatorios.");
-      return;
-    }
-
+  const handleGiven = async (student: Student, med: Medication) => {
     try {
-      if (editingStudentId) {
-        const studentDocRef = doc(db, "students", editingStudentId);
-        await updateDoc(studentDocRef, {
-          firstName: formData.firstName,
-          firstSurname: formData.firstSurname,
-          secondSurname: formData.secondSurname,
-          updatedAt: serverTimestamp(),
-        });
+      const existingAdmin = administrations.find(a => 
+        a.studentId === student.id && 
+        a.medicationId === med.id && 
+        a.date === dateFilter &&
+        (timeRangeFilter === "AYUNO/DESAYUNO" ? ["AYUNO", "DESAYUNO"].includes(a.timeRange) : a.timeRange === timeRangeFilter)
+      );
+
+      if (existingAdmin && existingAdmin.status === "GIVEN") {
+        console.warn("Administración ya registrada.");
+        return;
+      }
+      
+      const newTimeRange = timeRangeFilter === "AYUNO/DESAYUNO" ? med.timeRanges.find(tr => ["AYUNO", "DESAYUNO"].includes(tr)) : timeRangeFilter;
+
+      await addDoc(collection(db, "administrations"), {
+        studentId: student.id,
+        studentFullNameSortable: `${student.firstSurname} ${student.secondSurname}, ${student.firstName}`,
+        medicationId: med.id,
+        medicationName: med.medicationName,
+        dosage: med.dosage,
+        date: dateFilter,
+        timeRange: newTimeRange,
+        status: "GIVEN",
+        givenByUid: "test-uid",
+        createdAt: serverTimestamp(),
+        hour: med.hour || "",
+      });
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        console.error("Error al guardar administración:", err.message);
       } else {
-        const newStudentDoc = await addDoc(collection(db, "students"), {
-          firstName: formData.firstName,
-          firstSurname: formData.firstSurname,
-          secondSurname: formData.secondSurname,
+        console.error(
+          "Ocurrió un error inesperado al guardar la administración."
+        );
+      }
+    }
+  };
+
+  const handleDeactivateStudent = async (studentId: string) => {
+    try {
+        const studentRef = doc(db, "students", studentId);
+        await updateDoc(studentRef, {
+            active: false,
+        });
+        console.log("Estudiante desactivado con éxito:", studentId);
+    } catch (err) {
+        console.error("Error al desactivar al estudiante:", err);
+    }
+  };
+
+  const filteredStudents = students.filter((s) => {
+    const medsForStudent = medications.filter(
+      (m) =>
+        m.studentId === s.id &&
+        (timeRangeFilter === "AYUNO/DESAYUNO"
+          ? m.timeRanges.some((tr) => ["AYUNO", "DESAYUNO"].includes(tr))
+          : m.timeRanges.includes(timeRangeFilter)) &&
+        dateFilter >= m.startDate &&
+        dateFilter <= m.endDate
+    );
+    const wasGiven = administrations.some(
+      (a) => a.studentId === s.id && a.status === "GIVEN"
+    );
+
+    if (statusFilter === "ALL") return medsForStudent.length > 0;
+    if (statusFilter === "GIVEN") return wasGiven;
+    if (statusFilter === "NOSHOW") return !wasGiven && medsForStudent.length > 0;
+    return true;
+  });
+
+  const getMedicationsForStudent = (studentId: string) => {
+    return medications.filter(
+      (m) =>
+        m.studentId === studentId &&
+        (timeRangeFilter === "AYUNO/DESAYUNO"
+          ? m.timeRanges.some((tr) => ["AYUNO", "DESAYUNO"].includes(tr))
+          : m.timeRanges.includes(timeRangeFilter)) &&
+        dateFilter >= m.startDate &&
+        dateFilter <= m.endDate
+    );
+  };
+
+  const addMedicationField = () => {
+    setFormData({
+      ...formData,
+      medicationsToAdd: [
+        ...formData.medicationsToAdd,
+        {
+          medicationName: "",
+          dosage: "",
+          timeRanges: [],
+          notes: "",
+          startDate: dateFilter,
+          endDate: dateFilter,
+        },
+      ],
+    });
+  };
+
+  const handleSaveStudent = async () => {
+    try {
+      const studentRef = await addDoc(collection(db, "students"), {
+        firstName: formData.firstName,
+        firstSurname: formData.firstSurname,
+        secondSurname: formData.secondSurname,
+        active: true,
+        createdAt: serverTimestamp(),
+      });
+
+      for (const med of formData.medicationsToAdd) {
+        await addDoc(collection(db, "medications"), {
+          studentId: studentRef.id,
+          medicationName: med.medicationName,
+          dosage: med.dosage,
+          timeRanges: med.timeRanges,
+          notes: med.notes,
+          startDate: med.startDate,
+          endDate: med.endDate,
           active: true,
           createdAt: serverTimestamp(),
         });
+      }
 
-        const batch = writeBatch(db);
-        formData.medicationsToAdd.forEach((med) => {
-          const medRef = doc(collection(db, "medications"));
-          batch.set(medRef, {
-            ...med,
-            studentId: newStudentDoc.id,
+      setShowForm(false);
+      setFormData({
+        firstName: "",
+        firstSurname: "",
+        secondSurname: "",
+        medicationsToAdd: [],
+      });
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        console.error("Error al guardar estudiante/medicamentos:", err.message);
+      } else {
+        console.error(
+          "Ocurrió un error inesperado al guardar estudiante/medicamentos."
+        );
+      }
+    }
+  };
+
+  const handleSaveExtraMed = async () => {
+    try {
+      const student = students.find(
+        (s) =>
+          s.firstName === extraMedForm.firstName &&
+          s.firstSurname === extraMedForm.firstSurname
+      );
+
+      if (!student) {
+        console.error("Estudiante no encontrado");
+        return;
+      }
+
+      await addDoc(collection(db, "medications"), {
+        studentId: student.id,
+        medicationName: extraMedForm.medicationName,
+        dosage: extraMedForm.dosage,
+        timeRanges: extraMedForm.timeRanges,
+        notes: extraMedForm.notes,
+        startDate: extraMedForm.date,
+        endDate: extraMedForm.date,
+        hour: extraMedForm.hour,
+        active: true,
+        createdAt: serverTimestamp(),
+      });
+
+      setShowExtraMedForm(false);
+      setExtraMedForm({
+        firstName: "",
+        firstSurname: "",
+        medicationName: "",
+        dosage: "",
+        timeRanges: [],
+        notes: "",
+        hour: "",
+        date: dateFilter,
+      });
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        console.error("Error al guardar medicamento extra:", err.message);
+      } else {
+        console.error(
+          "Ocurrió un error inesperado al guardar el medicamento extra."
+        );
+      }
+    }
+  };
+
+  const handleEditStudent = (student: Student) => {
+    const studentMeds = medications.filter((m) => m.studentId === student.id);
+    setEditingStudentId(student.id);
+    setFormData({
+      firstName: student.firstName,
+      firstSurname: student.firstSurname,
+      secondSurname: student.secondSurname,
+      medicationsToAdd: studentMeds,
+    });
+    setShowForm(true);
+  };
+
+  const handleUpdateStudent = async () => {
+    if (!editingStudentId) return;
+
+    try {
+      const batch = writeBatch(db);
+
+      const studentRef = doc(db, "students", editingStudentId);
+      batch.update(studentRef, {
+        firstName: formData.firstName,
+        firstSurname: formData.firstSurname,
+        secondSurname: formData.secondSurname,
+      });
+
+      const oldMeds = medications.filter((m) => m.studentId === editingStudentId);
+      const newMeds = formData.medicationsToAdd;
+
+      for (const oldMed of oldMeds) {
+        if (!newMeds.some((newMed) => newMed.id === oldMed.id)) {
+          batch.delete(doc(db, "medications", oldMed.id));
+        }
+      }
+
+      for (const newMed of newMeds) {
+        if (newMed.id) {
+          const medRef = doc(db, "medications", newMed.id);
+          batch.update(medRef, {
+            medicationName: newMed.medicationName,
+            dosage: newMed.dosage,
+            timeRanges: newMed.timeRanges,
+            notes: newMed.notes,
+            startDate: newMed.startDate,
+            endDate: newMed.endDate,
+            hour: newMed.hour || "",
+          });
+        } else {
+          const newMedRef = doc(collection(db, "medications"));
+          batch.set(newMedRef, {
+            studentId: editingStudentId,
+            medicationName: newMed.medicationName,
+            dosage: newMed.dosage,
+            timeRanges: newMed.timeRanges,
+            notes: newMed.notes,
+            startDate: newMed.startDate,
+            endDate: newMed.endDate,
+            hour: newMed.hour || "",
             active: true,
             createdAt: serverTimestamp(),
           });
-        });
-        await batch.commit();
+        }
       }
+
+      await batch.commit();
 
       setShowForm(false);
       setEditingStudentId(null);
@@ -240,134 +407,37 @@ export default function MainPageClient() {
         secondSurname: "",
         medicationsToAdd: [],
       });
-    } catch (error) {
-      console.error("Error al crear/actualizar estudiante:", error);
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        console.error("Error al actualizar estudiante/medicamentos:", err.message);
+      } else {
+        console.error("Ocurrió un error inesperado al actualizar.");
+      }
     }
   };
 
-  const handleSaveExtraMed = async () => {
-    if (!extraMedForm.medicationName || extraMedForm.timeRanges.length === 0) {
-      alert("Por favor, complete el nombre y los horarios del medicamento.");
-      return;
-    }
-
-    try {
-      await addDoc(collection(db, "medications"), {
-        ...extraMedForm,
-        studentId: "",
-        active: true,
-        createdAt: serverTimestamp(),
-        startDate: new Date().toISOString().split("T")[0],
-        endDate: "2099-12-31",
-      });
-
-      setShowExtraMedForm(false);
-      setExtraMedForm({
-        medicationName: "",
-        dosage: "",
-        notes: "",
-        timeRanges: [],
-      });
-    } catch (error) {
-      console.error("Error al guardar medicamento extra:", error);
-    }
-  };
-
-  const handleAdminStatusUpdate = async (
-    studentId: string,
-    medication: Medication,
-    status: "GIVEN" | "NOSHOW"
-  ) => {
-    const adminQuery = query(
-      collection(db, "administrations"),
-      where("studentId", "==", studentId),
-      where("medicationId", "==", medication.id),
-      where("date", "==", dateFilter),
-      where("timeRange", "==", timeRangeFilter)
-    );
-
-    const snapshot = await getDocs(adminQuery);
-
-    if (snapshot.empty) {
-      await addDoc(collection(db, "administrations"), {
-        studentId,
-        studentFullNameSortable: `${
-          students.find((s) => s.id === studentId)?.firstSurname
-        } ${
-          students.find((s) => s.id === studentId)?.secondSurname
-        } ${students.find((s) => s.id === studentId)?.firstName}`,
-        medicationId: medication.id,
-        medicationName: medication.medicationName,
-        dosage: medication.dosage,
-        date: dateFilter,
-        timeRange: timeRangeFilter,
-        status,
-        givenByUid: "placeholder_uid",
-        createdAt: serverTimestamp(),
-      });
-    } else {
-      const adminDoc = snapshot.docs[0];
-      await updateDoc(doc(db, "administrations", adminDoc.id), {
-        status,
-        updatedAt: serverTimestamp(),
-      });
-    }
-  };
-
-  const getStudentAdminStatus = (studentId: string, medicationId: string) => {
-    const admin = administrations.find(
-      (a) =>
-        a.studentId === studentId &&
-        a.medicationId === medicationId &&
-        a.date === dateFilter &&
-        a.timeRange === timeRangeFilter
-    );
-    return admin?.status || "PENDING";
-  };
-
-  const exportListAsImage = () => {
-    if (studentListRef.current) {
-      htmlToImage
-        .toPng(studentListRef.current)
-        .then(function (dataUrl) {
-          const link = document.createElement("a");
-          link.download = `lista_medicamentos_${dateFilter}_${timeRangeFilter}.png`;
-          link.href = dataUrl;
-          link.click();
-        })
-        .catch(function (error) {
-          console.error("oops, algo salió mal!", error);
-        });
-    }
-  };
-
-  const handleShowExtraMedsGiven = async () => {
-    if (!extraMedsStartDate || !extraMedsEndDate) {
-      alert("Por favor, seleccione un rango de fechas.");
-      return;
-    }
-
-    const q = query(
-      collection(db, "administrations"),
-      where("studentId", "==", ""),
-      where("status", "==", "GIVEN")
-    );
-
-    const querySnapshot = await getDocs(q);
-    const allExtraMedsGiven: Administration[] = querySnapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data(),
-    })) as Administration[];
-
-    const start = new Date(extraMedsStartDate);
-    const end = new Date(extraMedsEndDate);
-
-    const filtered = allExtraMedsGiven.filter(admin => {
-      const adminDate = new Date(admin.date);
-      return adminDate >= start && adminDate <= end;
+  const handleFormClose = () => {
+    setShowForm(false);
+    setEditingStudentId(null);
+    setFormData({
+      firstName: "",
+      firstSurname: "",
+      secondSurname: "",
+      medicationsToAdd: [],
     });
+  };
 
-    setFilteredExtraMeds(filtered);
+  // NUEVA FUNCIÓN PARA EXPORTAR LA LISTA A UNA IMAGEN
+  const exportListAsImage = async () => {
+    if (studentListRef.current) {
+      const dataUrl = await htmlToImage.toPng(studentListRef.current, {
+        backgroundColor: "white",
+      });
+      const link = document.createElement("a");
+      link.download = `meds-${dateFilter}-${timeRangeFilter}.png`;
+      link.href = dataUrl;
+      link.click();
+    }
   };
 
   return (
@@ -398,12 +468,7 @@ export default function MainPageClient() {
           >
             + Agregar Medicamento Extra
           </button>
-          <button
-            onClick={() => setShowExtraMedsPopup(true)}
-            className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl shadow transition"
-          >
-            Ver Medicamentos Extras Entregados
-          </button>
+          {/* Nuevo botón para exportar */}
           <button
             onClick={exportListAsImage}
             className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-xl shadow transition"
@@ -413,196 +478,340 @@ export default function MainPageClient() {
         </div>
       </header>
 
-      <div ref={studentListRef}>
-        <div className="flex gap-2 flex-wrap mb-6">
-          <input
-            id="dateFilter"
-            name="dateFilter"
-            type="date"
-            value={dateFilter}
-            onChange={(e) => setDateFilter(e.target.value)}
-            className="border p-2 rounded-lg shadow-sm"
-          />
-          <select
-            id="timeRangeFilter"
-            name="timeRangeFilter"
-            value={timeRangeFilter}
-            onChange={(e) => setTimeRangeFilter(e.target.value)}
-            className="border p-2 rounded-lg shadow-sm"
-          >
-            <option value="AYUNO/DESAYUNO">Ayuno/Desayuno</option>
-            <option value="ALMUERZO">Almuerzo</option>
-            <option value="CENA">Cena</option>
-            <option value="SOS">SOS</option>
-          </select>
-          <div className="flex gap-2">
-            {["ALL", "GIVEN", "NOSHOW"].map((status) => (
-              <button
-                key={status}
-                onClick={() => setStatusFilter(status as "ALL" | "GIVEN" | "NOSHOW")}
-                className={`px-3 py-1 rounded shadow-sm transition ${
-                  statusFilter === status
-                    ? status === "GIVEN"
-                      ? "bg-green-600 text-white"
-                      : status === "NOSHOW"
-                      ? "bg-red-600 text-white"
-                      : "bg-blue-600 text-white"
-                    : "bg-white hover:bg-gray-100"
-                }`}
-              >
-                {status === "ALL" ? "Todos" : status}
-              </button>
-            ))}
-          </div>
-        </div>
+      <div className="flex gap-2 flex-wrap mb-6">
+        <input
+          id="dateFilter"
+          name="dateFilter"
+          type="date"
+          value={dateFilter}
+          onChange={(e) => setDateFilter(e.target.value)}
+          className="border p-2 rounded-lg shadow-sm"
+        />
+        <select
+          id="timeRangeFilter"
+          name="timeRangeFilter"
+          value={timeRangeFilter}
+          onChange={(e) => setTimeRangeFilter(e.target.value)}
+          className="border p-2 rounded-lg shadow-sm"
+        >
+          <option value="AYUNO/DESAYUNO">Ayuno/Desayuno</option>
+          <option value="ALMUERZO">Almuerzo</option>
+          <option value="CENA">Cena</option>
+          <option value="SOS">SOS</option>
+        </select>
 
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {filteredStudents.length === 0 ? (
-            <div className="col-span-full text-gray-500 text-center py-10">
-              No hay estudiantes para mostrar.
-            </div>
-          ) : (
-            filteredStudents.map((student) => (
-              <div
-                key={student.id}
-                className="bg-white p-6 rounded-xl shadow-lg border border-gray-200"
-              >
-                <h2 className="text-xl font-semibold text-gray-800 mb-2">
-                  {student.firstName} {student.firstSurname}{" "}
-                  {student.secondSurname}
-                </h2>
-                <div className="space-y-4">
-                  {medications
-                    .filter(
-                      (med) =>
-                        med.studentId === student.id &&
-                        med.timeRanges.includes(timeRangeFilter.split("/")[0]) &&
-                        new Date(dateFilter) >= new Date(med.startDate) &&
-                        new Date(dateFilter) <= new Date(med.endDate)
-                    )
-                    .map((med) => (
-                      <div
-                        key={med.id}
-                        className="bg-gray-100 p-3 rounded-lg border-l-4 border-l-blue-500"
-                      >
-                        <p className="font-medium text-gray-700">
-                          {med.medicationName} ({med.dosage})
-                        </p>
-                        <p className="text-sm text-gray-500 mt-1">
-                          {med.notes}
-                        </p>
-                        <div className="flex gap-2 mt-2">
-                          <button
-                            onClick={() =>
-                              handleAdminStatusUpdate(
-                                student.id,
-                                med,
-                                "GIVEN"
-                              )
-                            }
-                            className={`px-3 py-1 rounded-full text-xs font-semibold transition ${
-                              getStudentAdminStatus(student.id, med.id) === "GIVEN"
-                                ? "bg-green-600 text-white"
-                                : "bg-green-100 text-green-700 hover:bg-green-200"
-                            }`}
-                          >
-                            DADO
-                          </button>
-                          <button
-                            onClick={() =>
-                              handleAdminStatusUpdate(
-                                student.id,
-                                med,
-                                "NOSHOW"
-                              )
-                            }
-                            className={`px-3 py-1 rounded-full text-xs font-semibold transition ${
-                              getStudentAdminStatus(student.id, med.id) === "NOSHOW"
-                                ? "bg-red-600 text-white"
-                                : "bg-red-100 text-red-700 hover:bg-red-200"
-                            }`}
-                          >
-                            NO APARECE
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  {medications
-                    .filter(
-                      (med) =>
-                        med.studentId === "" &&
-                        med.timeRanges.includes(timeRangeFilter.split("/")[0]) &&
-                        new Date(dateFilter) >= new Date(med.startDate) &&
-                        new Date(dateFilter) <= new Date(med.endDate)
-                    )
-                    .map((med) => (
-                      <div
-                        key={med.id}
-                        className="bg-gray-100 p-3 rounded-lg border-l-4 border-l-purple-500"
-                      >
-                        <p className="font-medium text-gray-700">
-                          {med.medicationName} ({med.dosage})
-                        </p>
-                        <p className="text-sm text-gray-500 mt-1">
-                          {med.notes}
-                        </p>
-                      </div>
-                    ))}
-                </div>
-              </div>
-            ))
-          )}
+        <div className="flex gap-2">
+          {["ALL", "GIVEN", "NOSHOW"].map((status) => (
+            <button
+              key={status}
+              onClick={() => setStatusFilter(status as "ALL" | "GIVEN" | "NOSHOW")}
+              className={`px-3 py-1 rounded shadow-sm transition ${
+                statusFilter === status
+                  ? status === "GIVEN"
+                    ? "bg-green-600 text-white"
+                    : status === "NOSHOW"
+                    ? "bg-red-600 text-white"
+                    : "bg-blue-600 text-white"
+                  : "bg-white hover:bg-gray-100"
+              }`}
+            >
+              {status === "ALL" ? "Todos" : status}
+            </button>
+          ))}
         </div>
       </div>
 
-      {showForm && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center p-4">
-          <div className="bg-white p-6 rounded-lg shadow-xl w-full max-w-lg">
-            <h2 className="text-2xl font-bold mb-4">
-              {editingStudentId ? 'Editar Estudiante' : 'Crear Estudiante'}
+      {/* Nuevo: Añadir la referencia al contenedor que se va a exportar */}
+      <div ref={studentListRef} className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        {filteredStudents.length === 0 ? (
+          <div className="col-span-full text-gray-500 text-center py-10">
+            No hay estudiantes para mostrar.
+          </div>
+        ) : (
+          [...filteredStudents]
+            .sort((a, b) => a.firstSurname.localeCompare(b.firstSurname))
+            .map((s) => (
+              <div
+                key={s.id}
+                onClick={() => setSelectedStudent(s)}
+                className="bg-white rounded-2xl shadow-md p-4 transition cursor-pointer"
+              >
+                <p className="font-semibold text-gray-800 mb-2">
+                  {s.firstSurname} {s.secondSurname}, {s.firstName}
+                </p>
+                <div className="space-y-1">
+                  {getMedicationsForStudent(s.id).map((med) => {
+                    const wasGiven = administrations.some(
+                      (a) =>
+                        a.studentId === s.id &&
+                        a.medicationId === med.id &&
+                        a.status === "GIVEN" &&
+                        (timeRangeFilter === "AYUNO/DESAYUNO"
+                          ? ["AYUNO", "DESAYUNO"].includes(a.timeRange)
+                          : a.timeRange === timeRangeFilter)
+                    );
+                    return (
+                      <div
+                        key={med.id}
+                        className={`flex justify-between items-center border rounded-lg px-3 py-1 ${
+                          wasGiven
+                            ? "bg-green-100 border-green-400"
+                            : "bg-gray-50 border-gray-200"
+                        }`}
+                      >
+                        <div className="flex flex-col">
+                          <span className="font-medium">{med.medicationName}</span>
+                          <span className="text-sm text-gray-500">{med.dosage}</span>
+                        </div>
+                        {!wasGiven ? (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleGiven(s, med);
+                            }}
+                            className="bg-green-500 text-white px-3 py-1 rounded-lg"
+                          >
+                            Given
+                          </button>
+                        ) : (
+                          <span className="text-green-700 font-semibold">✅ Given</span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="flex gap-2 mt-2">
+                    <button
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            handleEditStudent(s);
+                        }}
+                        className="text-sm text-blue-500 hover:text-blue-700"
+                    >
+                        Editar
+                    </button>
+                    <button
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeactivateStudent(s.id);
+                        }}
+                        className="text-sm text-red-500 hover:text-red-700"
+                    >
+                        Eliminar
+                    </button>
+                </div>
+              </div>
+            ))
+        )}
+      </div>
+
+      {selectedStudent && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-2xl shadow-lg w-96 relative max-h-[90vh] overflow-y-auto">
+            <button
+              onClick={() => setSelectedStudent(null)}
+              className="absolute top-2 right-2 text-gray-500 hover:text-black"
+            >
+              ✕
+            </button>
+            <h2 className="text-lg font-bold mb-4">
+              {selectedStudent.firstSurname} {selectedStudent.secondSurname},{" "}
+              {selectedStudent.firstName}
             </h2>
-            <input
-              type="text"
-              name="firstName"
-              placeholder='Nombre'
-              value={formData.firstName}
-              onChange={(e) =>
-                setFormData({ ...formData, firstName: e.target.value })
-              }
-              className="border p-2 rounded w-full mb-2"
-            />
-            <input
-              type="text"
-              name="firstSurname"
-              placeholder='Primer Apellido'
-              value={formData.firstSurname}
-              onChange={(e) =>
-                setFormData({ ...formData, firstSurname: e.target.value })
-              }
-              className="border p-2 rounded w-full mb-2"
-            />
-            <input
-              type="text"
-              name="secondSurname"
-              placeholder='Segundo Apellido'
-              value={formData.secondSurname}
-              onChange={(e) =>
-                setFormData({ ...formData, secondSurname: e.target.value })
-              }
-              className="border p-2 rounded w-full mb-2"
-            />
-            <div className="flex justify-end gap-2 mt-4">
+
+            <div className="space-y-2">
+              {getMedicationsForStudent(selectedStudent.id).map((med) => {
+                const wasGiven = administrations.some(
+                  (a) =>
+                    a.studentId === selectedStudent.id &&
+                    a.medicationId === med.id &&
+                    a.status === "GIVEN" &&
+                    (timeRangeFilter === "AYUNO/DESAYUNO"
+                      ? ["AYUNO", "DESAYUNO"].includes(a.timeRange)
+                      : a.timeRange === timeRangeFilter)
+                );
+                return (
+                  <div
+                    key={med.id}
+                    className="flex justify-between items-center border rounded-lg px-3 py-1"
+                  >
+                    <div>
+                      <p className="font-medium">{med.medicationName}</p>
+                      <p className="text-sm text-gray-500">{med.dosage}</p>
+                    </div>
+                    {!wasGiven ? (
+                      <button
+                        onClick={() => handleGiven(selectedStudent, med)}
+                        className="bg-green-500 text-white px-3 py-1 rounded-lg"
+                      >
+                        Given
+                      </button>
+                    ) : (
+                      <span className="text-green-600 font-semibold">✅ Given</span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showForm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-2xl shadow-lg w-96 relative max-h-[90vh] overflow-y-auto">
+            <button
+              onClick={handleFormClose}
+              className="absolute top-2 right-2 text-gray-500 hover:text-black"
+            >
+              ✕
+            </button>
+            <h2 className="text-lg font-bold mb-4">
+              {editingStudentId ? "Editar Estudiante" : "Nuevo Estudiante"}
+            </h2>
+            <div className="space-y-2">
+              <input
+                id="firstName"
+                name="firstName"
+                placeholder="Nombre"
+                value={formData.firstName}
+                onChange={(e) =>
+                  setFormData({ ...formData, firstName: e.target.value })
+                }
+                className="border p-2 rounded w-full"
+              />
+              <input
+                id="firstSurname"
+                name="firstSurname"
+                placeholder="Primer Apellido"
+                value={formData.firstSurname}
+                onChange={(e) =>
+                  setFormData({ ...formData, firstSurname: e.target.value })
+                }
+                className="border p-2 rounded w-full"
+              />
+              <input
+                id="secondSurname"
+                name="secondSurname"
+                placeholder="Segundo Apellido"
+                value={formData.secondSurname}
+                onChange={(e) =>
+                  setFormData({ ...formData, secondSurname: e.target.value })
+                }
+                className="border p-2 rounded w-full"
+              />
+
+              {formData.medicationsToAdd.map((med, idx) => (
+                <div key={idx} className="border p-2 rounded space-y-2">
+                  <input
+                    id={`medicationName-${idx}`}
+                    name={`medicationName-${idx}`}
+                    placeholder="Medicamento"
+                    value={med.medicationName}
+                    onChange={(e) => {
+                      const meds = [...formData.medicationsToAdd];
+                      meds[idx].medicationName = e.target.value;
+                      setFormData({ ...formData, medicationsToAdd: meds });
+                    }}
+                    className="border p-2 rounded w-full"
+                  />
+                  <input
+                    id={`dosage-${idx}`}
+                    name={`dosage-${idx}`}
+                    placeholder="Dosis"
+                    value={med.dosage}
+                    onChange={(e) => {
+                      const meds = [...formData.medicationsToAdd];
+                      meds[idx].dosage = e.target.value;
+                      setFormData({ ...formData, medicationsToAdd: meds });
+                    }}
+                    className="border p-2 rounded w-full"
+                  />
+                  <div className="flex flex-wrap gap-2">
+                    {["AYUNO", "DESAYUNO", "ALMUERZO", "CENA", "SOS"].map(
+                      (tr) => (
+                        <button
+                          key={tr}
+                          type="button"
+                          onClick={() => {
+                            const meds = [...formData.medicationsToAdd];
+                            meds[idx].timeRanges = meds[idx].timeRanges.includes(tr)
+                              ? meds[idx].timeRanges.filter((r) => r !== tr)
+                              : [...meds[idx].timeRanges, tr];
+                            setFormData({ ...formData, medicationsToAdd: meds });
+                          }}
+                          className={`px-2 py-1 rounded ${
+                            med.timeRanges.includes(tr)
+                              ? "bg-green-500 text-white"
+                              : "bg-gray-200"
+                          }`}
+                        >
+                          {tr}
+                        </button>
+                      )
+                    )}
+                  </div>
+                  <input
+                    id={`startDate-${idx}`}
+                    name={`startDate-${idx}`}
+                    type="date"
+                    value={med.startDate}
+                    onChange={(e) => {
+                      const meds = [...formData.medicationsToAdd];
+                      meds[idx].startDate = e.target.value;
+                      setFormData({ ...formData, medicationsToAdd: meds });
+                    }}
+                    className="border p-2 rounded w-full"
+                  />
+                  <input
+                    id={`endDate-${idx}`}
+                    name={`endDate-${idx}`}
+                    type="date"
+                    value={med.endDate}
+                    onChange={(e) => {
+                      const meds = [...formData.medicationsToAdd];
+                      meds[idx].endDate = e.target.value;
+                      setFormData({ ...formData, medicationsToAdd: meds });
+                    }}
+                    className="border p-2 rounded w-full"
+                  />
+                  <textarea
+                    id={`notes-${idx}`}
+                    name={`notes-${idx}`}
+                    placeholder="Observaciones"
+                    value={med.notes}
+                    onChange={(e) => {
+                      const meds = [...formData.medicationsToAdd];
+                      meds[idx].notes = e.target.value;
+                      setFormData({ ...formData, medicationsToAdd: meds });
+                    }}
+                    className="border p-2 rounded w-full"
+                  />
+                  <button
+                    onClick={() => {
+                      const meds = [...formData.medicationsToAdd];
+                      meds.splice(idx, 1);
+                      setFormData({ ...formData, medicationsToAdd: meds });
+                    }}
+                    className="bg-red-500 text-white px-2 py-1 rounded text-sm"
+                  >
+                    Eliminar
+                  </button>
+                </div>
+              ))}
+
               <button
-                onClick={() => setShowForm(false)}
-                className="bg-gray-300 text-gray-800 px-4 py-2 rounded"
+                onClick={addMedicationField}
+                className="bg-gray-200 text-black px-3 py-1 rounded mt-2"
               >
-                Cancelar
+                + Agregar Medicamento
               </button>
+
               <button
-                onClick={handleCreateOrUpdateStudent}
-                className="bg-blue-600 text-white px-4 py-2 rounded"
+                onClick={editingStudentId ? handleUpdateStudent : handleSaveStudent}
+                className="bg-blue-500 text-white px-3 py-1 rounded mt-2 w-full"
               >
-                {editingStudentId ? 'Guardar Cambios' : 'Crear'}
+                {editingStudentId ? "Guardar Cambios" : "Guardar"}
               </button>
             </div>
           </div>
@@ -610,36 +819,80 @@ export default function MainPageClient() {
       )}
 
       {showExtraMedForm && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center p-4">
-          <div className="bg-white p-6 rounded-lg shadow-xl w-full max-w-lg">
-            <h2 className="text-2xl font-bold mb-4">Agregar Medicamento Extra</h2>
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-2xl shadow-lg w-96 relative max-h-[90vh] overflow-y-auto">
+            <button
+              onClick={() => setShowExtraMedForm(false)}
+              className="absolute top-2 right-2 text-gray-500 hover:text-black"
+            >
+              ✕
+            </button>
+            <h2 className="text-lg font-bold mb-4">Agregar Medicamento Extra</h2>
+
             <input
-              id="medicationName"
-              name="medicationName"
-              placeholder='Nombre del medicamento'
-              value={extraMedForm.medicationName}
+              id="extraFirstName"
+              name="extraFirstName"
+              placeholder="Nombre del Estudiante"
+              value={extraMedForm.firstName}
               onChange={(e) =>
-                setExtraMedForm({
-                  ...extraMedForm,
-                  medicationName: e.target.value,
-                })
+                setExtraMedForm({ ...extraMedForm, firstName: e.target.value })
               }
               className="border p-2 rounded w-full mb-2"
             />
             <input
-              id="dosage"
-              name="dosage"
-              placeholder='Dosificación'
+              id="extraFirstSurname"
+              name="extraFirstSurname"
+              placeholder="Primer Apellido"
+              value={extraMedForm.firstSurname}
+              onChange={(e) =>
+                setExtraMedForm({ ...extraMedForm, firstSurname: e.target.value })
+              }
+              className="border p-2 rounded w-full mb-2"
+            />
+            <input
+              id="extraMedicationName"
+              name="extraMedicationName"
+              placeholder="Medicamento"
+              value={extraMedForm.medicationName}
+              onChange={(e) =>
+                setExtraMedForm({ ...extraMedForm, medicationName: e.target.value })
+              }
+              className="border p-2 rounded w-full mb-2"
+            />
+            <input
+              id="extraDosage"
+              name="extraDosage"
+              placeholder="Dosis"
               value={extraMedForm.dosage}
               onChange={(e) =>
                 setExtraMedForm({ ...extraMedForm, dosage: e.target.value })
               }
               className="border p-2 rounded w-full mb-2"
             />
+            <input
+              id="extraHour"
+              name="extraHour"
+              type="time"
+              value={extraMedForm.hour}
+              onChange={(e) =>
+                setExtraMedForm({ ...extraMedForm, hour: e.target.value })
+              }
+              className="border p-2 rounded w-full mb-2"
+            />
+            <input
+              id="extraDate"
+              name="extraDate"
+              type="date"
+              value={extraMedForm.date}
+              onChange={(e) =>
+                setExtraMedForm({ ...extraMedForm, date: e.target.value })
+              }
+              className="border p-2 rounded w-full mb-2"
+            />
             <textarea
               id="extraNotes"
               name="extraNotes"
-              placeholder='Observaciones'
+              placeholder="Observaciones"
               value={extraMedForm.notes}
               onChange={(e) =>
                 setExtraMedForm({ ...extraMedForm, notes: e.target.value })
@@ -647,7 +900,7 @@ export default function MainPageClient() {
               className="border p-2 rounded w-full mb-2"
             />
             <div className="flex flex-wrap gap-2 mb-2">
-              {['AYUNO', 'DESAYUNO', 'ALMUERZO', 'CENA', 'SOS'].map((tr) => (
+              {["AYUNO", "DESAYUNO", "ALMUERZO", "CENA", "SOS"].map((tr) => (
                 <button
                   key={tr}
                   type="button"
@@ -659,8 +912,8 @@ export default function MainPageClient() {
                   }}
                   className={`px-2 py-1 rounded ${
                     extraMedForm.timeRanges.includes(tr)
-                      ? 'bg-green-500 text-white'
-                      : 'bg-gray-200'
+                      ? "bg-green-500 text-white"
+                      : "bg-gray-200"
                   }`}
                 >
                   {tr}
@@ -673,72 +926,6 @@ export default function MainPageClient() {
             >
               Guardar
             </button>
-          </div>
-        </div>
-      )}
-
-      {showExtraMedsPopup && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center p-4">
-          <div className="bg-white p-6 rounded-lg shadow-xl w-full max-w-lg max-h-[80vh] overflow-y-auto">
-            <h2 className="text-2xl font-bold mb-4">Medicamentos Extra Entregados</h2>
-            <div className="mb-4">
-              <label htmlFor="extraMedsStartDate" className="block text-sm font-medium text-gray-700">
-                Fecha de inicio
-              </label>
-              <input
-                type="date"
-                id="extraMedsStartDate"
-                value={extraMedsStartDate}
-                onChange={(e) => setExtraMedsStartDate(e.target.value)}
-                className="mt-1 block w-full border p-2 rounded-lg"
-              />
-            </div>
-            <div className="mb-4">
-              <label htmlFor="extraMedsEndDate" className="block text-sm font-medium text-gray-700">
-                Fecha de fin
-              </label>
-              <input
-                type="date"
-                id="extraMedsEndDate"
-                value={extraMedsEndDate}
-                onChange={(e) => setExtraMedsEndDate(e.target.value)}
-                className="mt-1 block w-full border p-2 rounded-lg"
-              />
-            </div>
-            <div className="flex justify-end gap-2 mb-4">
-              <button
-                onClick={handleShowExtraMedsGiven}
-                className="bg-emerald-600 text-white px-4 py-2 rounded-xl shadow transition"
-              >
-                Mostrar
-              </button>
-              <button
-                onClick={() => {
-                  setShowExtraMedsPopup(false);
-                  setFilteredExtraMeds([]);
-                  setExtraMedsStartDate("");
-                  setExtraMedsEndDate("");
-                }}
-                className="bg-gray-300 text-gray-800 px-4 py-2 rounded-xl shadow transition"
-              >
-                Cerrar
-              </button>
-            </div>
-            {filteredExtraMeds.length > 0 ? (
-              <div className="space-y-4">
-                {filteredExtraMeds.map((admin) => (
-                  <div key={admin.id} className="bg-gray-100 p-4 rounded-lg shadow-sm border-l-4 border-l-emerald-500">
-                    <p className="font-semibold text-gray-800">{admin.medicationName} ({admin.dosage})</p>
-                    <p className="text-sm text-gray-600">Fecha: {admin.date}</p>
-                    <p className="text-sm text-gray-600">Horario: {admin.timeRange}</p>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-center text-gray-500">
-                No hay medicamentos extra registrados como 'dados' en este rango de fechas.
-              </p>
-            )}
           </div>
         </div>
       )}
