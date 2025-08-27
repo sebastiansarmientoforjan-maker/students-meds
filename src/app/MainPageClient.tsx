@@ -40,6 +40,7 @@ interface Medication {
   active: boolean;
   createdAt: Timestamp | null;
   hour?: string;
+  medicationType?: "EXTRA" | "PERMANENT"; // Nueva propiedad
 }
 
 interface Administration {
@@ -265,6 +266,7 @@ export default function MainPageClient() {
           endDate: med.endDate,
           active: true,
           createdAt: serverTimestamp(),
+          medicationType: "PERMANENT",
         });
       }
 
@@ -288,19 +290,17 @@ export default function MainPageClient() {
 
   const handleSaveExtraMed = async () => {
     try {
-      const student = students.find(
-        (s) =>
-          s.firstName === extraMedForm.firstName &&
-          s.firstSurname === extraMedForm.firstSurname
-      );
-
-      if (!student) {
-        console.error("Estudiante no encontrado");
-        return;
-      }
+      // Modificación clave: No busca al estudiante. Lo crea directamente.
+      const studentRef = await addDoc(collection(db, "students"), {
+        firstName: extraMedForm.firstName,
+        firstSurname: extraMedForm.firstSurname,
+        secondSurname: "", // No se solicita en el formulario, se deja vacío
+        active: false, // Los estudiantes temporales se marcan como inactivos para no aparecer en la lista principal
+        createdAt: serverTimestamp(),
+      });
 
       await addDoc(collection(db, "medications"), {
-        studentId: student.id,
+        studentId: studentRef.id, // Asocia el medicamento al nuevo estudiante
         medicationName: extraMedForm.medicationName,
         dosage: extraMedForm.dosage,
         timeRanges: extraMedForm.timeRanges,
@@ -310,6 +310,7 @@ export default function MainPageClient() {
         hour: extraMedForm.hour,
         active: true,
         createdAt: serverTimestamp(),
+        medicationType: "EXTRA", // Nuevo campo para diferenciar el tipo de medicamento
       });
 
       setShowExtraMedForm(false);
@@ -393,6 +394,7 @@ export default function MainPageClient() {
             hour: newMed.hour || "",
             active: true,
             createdAt: serverTimestamp(),
+            medicationType: "PERMANENT",
           });
         }
       }
