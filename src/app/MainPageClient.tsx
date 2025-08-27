@@ -10,8 +10,6 @@ import {
   updateDoc,
   doc,
   serverTimestamp,
-  DocumentData,
-  QueryDocumentSnapshot,
   Timestamp,
   writeBatch,
   getDocs,
@@ -19,7 +17,7 @@ import {
 import { db } from "@/lib/firebase";
 import * as htmlToImage from "html-to-image";
 
-// Definimos los tipos para la base de datos para evitar 'any'
+// Definimos los tipos para la base de datos
 interface Student {
   id: string;
   firstName: string;
@@ -91,13 +89,6 @@ export default function MainPageClient() {
   const [showForm, setShowForm] = useState(false);
   const [showExtraMedForm, setShowExtraMedForm] = useState(false);
   const [editingStudentId, setEditingStudentId] = useState<string | null>(null);
-  const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
-  const [extraMedForm, setExtraMedForm] = useState<ExtraMedForm>({
-    medicationName: "",
-    dosage: "",
-    notes: "",
-    timeRanges: [],
-  });
   const [formData, setFormData] = useState<{
     firstName: string;
     firstSurname: string;
@@ -108,6 +99,13 @@ export default function MainPageClient() {
     firstSurname: "",
     secondSurname: "",
     medicationsToAdd: [],
+  });
+
+  const [extraMedForm, setExtraMedForm] = useState<ExtraMedForm>({
+    medicationName: "",
+    dosage: "",
+    notes: "",
+    timeRanges: [],
   });
 
   const [showExtraMedsPopup, setShowExtraMedsPopup] = useState(false);
@@ -315,7 +313,7 @@ export default function MainPageClient() {
       });
     }
   };
-  
+
   const getStudentAdminStatus = (studentId: string, medicationId: string) => {
     const admin = administrations.find(
       (a) =>
@@ -326,7 +324,6 @@ export default function MainPageClient() {
     );
     return admin?.status || "PENDING";
   };
-
 
   const exportListAsImage = () => {
     if (studentListRef.current) {
@@ -739,7 +736,7 @@ export default function MainPageClient() {
               </div>
             ) : (
               <p className="text-center text-gray-500">
-                No hay medicamentos extra registrados como "dados" en este rango de fechas.
+                No hay medicamentos extra registrados como 'dados' en este rango de fechas.
               </p>
             )}
           </div>
