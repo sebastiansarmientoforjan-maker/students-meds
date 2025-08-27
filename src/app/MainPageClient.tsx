@@ -564,7 +564,7 @@ export default function MainPageClient() {
             <input
               type="text"
               name="firstName"
-              placeholder="Nombre"
+              placeholder='Nombre'
               value={formData.firstName}
               onChange={(e) =>
                 setFormData({ ...formData, firstName: e.target.value })
@@ -574,7 +574,7 @@ export default function MainPageClient() {
             <input
               type="text"
               name="firstSurname"
-              placeholder="Primer Apellido"
+              placeholder='Primer Apellido'
               value={formData.firstSurname}
               onChange={(e) =>
                 setFormData({ ...formData, firstSurname: e.target.value })
@@ -584,7 +584,7 @@ export default function MainPageClient() {
             <input
               type="text"
               name="secondSurname"
-              placeholder="Segundo Apellido"
+              placeholder='Segundo Apellido'
               value={formData.secondSurname}
               onChange={(e) =>
                 setFormData({ ...formData, secondSurname: e.target.value })
@@ -616,7 +616,7 @@ export default function MainPageClient() {
             <input
               id="medicationName"
               name="medicationName"
-              placeholder="Nombre del medicamento"
+              placeholder='Nombre del medicamento'
               value={extraMedForm.medicationName}
               onChange={(e) =>
                 setExtraMedForm({
@@ -629,7 +629,7 @@ export default function MainPageClient() {
             <input
               id="dosage"
               name="dosage"
-              placeholder="Dosificación"
+              placeholder='Dosificación'
               value={extraMedForm.dosage}
               onChange={(e) =>
                 setExtraMedForm({ ...extraMedForm, dosage: e.target.value })
@@ -639,7 +639,7 @@ export default function MainPageClient() {
             <textarea
               id="extraNotes"
               name="extraNotes"
-              placeholder="Observaciones"
+              placeholder='Observaciones'
               value={extraMedForm.notes}
               onChange={(e) =>
                 setExtraMedForm({ ...extraMedForm, notes: e.target.value })
@@ -647,7 +647,7 @@ export default function MainPageClient() {
               className="border p-2 rounded w-full mb-2"
             />
             <div className="flex flex-wrap gap-2 mb-2">
-              {["AYUNO", "DESAYUNO", "ALMUERZO", "CENA", "SOS"].map((tr) => (
+              {['AYUNO', 'DESAYUNO', 'ALMUERZO', 'CENA', 'SOS'].map((tr) => (
                 <button
                   key={tr}
                   type="button"
@@ -659,8 +659,8 @@ export default function MainPageClient() {
                   }}
                   className={`px-2 py-1 rounded ${
                     extraMedForm.timeRanges.includes(tr)
-                      ? "bg-green-500 text-white"
-                      : "bg-gray-200"
+                      ? 'bg-green-500 text-white'
+                      : 'bg-gray-200'
                   }`}
                 >
                   {tr}
