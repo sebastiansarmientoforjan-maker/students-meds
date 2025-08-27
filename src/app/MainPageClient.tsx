@@ -512,10 +512,12 @@ export default function MainPageClient() {
             .map((s) => (
               <div
                 key={s.id}
-                onClick={() => setSelectedStudent(s)}
-                className="bg-white rounded-2xl shadow-md p-4 cursor-pointer hover:shadow-lg transition"
+                className="bg-white rounded-2xl shadow-md p-4 transition"
               >
-                <p className="font-semibold text-gray-800 mb-2">
+                <p
+                  onClick={() => setSelectedStudent(s)}
+                  className="font-semibold text-gray-800 mb-2 cursor-pointer hover:underline"
+                >
                   {s.firstSurname} {s.secondSurname}, {s.firstName}
                 </p>
                 <div className="space-y-1">
