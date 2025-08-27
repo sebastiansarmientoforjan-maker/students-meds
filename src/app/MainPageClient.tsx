@@ -559,7 +559,7 @@ export default function MainPageClient() {
         <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center p-4">
           <div className="bg-white p-6 rounded-lg shadow-xl w-full max-w-lg">
             <h2 className="text-2xl font-bold mb-4">
-              {editingStudentId ? "Editar Estudiante" : "Crear Estudiante"}
+              {editingStudentId ? 'Editar Estudiante' : 'Crear Estudiante'}
             </h2>
             <input
               type="text"
@@ -602,7 +602,7 @@ export default function MainPageClient() {
                 onClick={handleCreateOrUpdateStudent}
                 className="bg-blue-600 text-white px-4 py-2 rounded"
               >
-                {editingStudentId ? "Guardar Cambios" : "Crear"}
+                {editingStudentId ? 'Guardar Cambios' : 'Crear'}
               </button>
             </div>
           </div>
