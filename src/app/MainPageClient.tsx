@@ -14,7 +14,6 @@ import {
   QueryDocumentSnapshot,
   Timestamp,
   writeBatch,
-  deleteDoc,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 
@@ -99,10 +98,8 @@ export default function MainPageClient() {
     date: dateFilter,
   });
 
-  // Nuevo estado para la edición
   const [editingStudentId, setEditingStudentId] = useState<string | null>(null);
 
-  // Función para convertir un documento de Firestore a un objeto tipado
   const mapDocToTypedObject = <T,>(
     doc: QueryDocumentSnapshot<DocumentData, DocumentData>
   ) => ({
@@ -110,16 +107,13 @@ export default function MainPageClient() {
     ...doc.data(),
   } as T);
 
-  // Cargar estudiantes activos
   useEffect(() => {
     const q = query(collection(db, "students"), where("active", "==", true));
     return onSnapshot(q, (snapshot) => {
-      console.log(`Documentos recibidos: ${snapshot.docs.length}`);
       setStudents(snapshot.docs.map((doc) => mapDocToTypedObject<Student>(doc)));
     });
   }, []);
 
-  // Cargar administraciones
   useEffect(() => {
     const rangesToQuery = timeRangeFilter === "AYUNO/DESAYUNO" ? ["AYUNO", "DESAYUNO"] : [timeRangeFilter];
     
@@ -136,7 +130,6 @@ export default function MainPageClient() {
     });
   }, [dateFilter, timeRangeFilter]);
 
-  // Cargar medicamentos
   useEffect(() => {
     const q = query(collection(db, "medications"));
     return onSnapshot(q, (snapshot) => {
@@ -148,6 +141,20 @@ export default function MainPageClient() {
 
   const handleGiven = async (student: Student, med: Medication) => {
     try {
+      const existingAdmin = administrations.find(a => 
+        a.studentId === student.id && 
+        a.medicationId === med.id && 
+        a.date === dateFilter &&
+        (timeRangeFilter === "AYUNO/DESAYUNO" ? ["AYUNO", "DESAYUNO"].includes(a.timeRange) : a.timeRange === timeRangeFilter)
+      );
+
+      if (existingAdmin && existingAdmin.status === "GIVEN") {
+        console.warn("Administración ya registrada.");
+        return;
+      }
+      
+      const newTimeRange = timeRangeFilter === "AYUNO/DESAYUNO" ? med.timeRanges.find(tr => ["AYUNO", "DESAYUNO"].includes(tr)) : timeRangeFilter;
+
       await addDoc(collection(db, "administrations"), {
         studentId: student.id,
         studentFullNameSortable: `${student.firstSurname} ${student.secondSurname}, ${student.firstName}`,
@@ -155,7 +162,7 @@ export default function MainPageClient() {
         medicationName: med.medicationName,
         dosage: med.dosage,
         date: dateFilter,
-        timeRange: timeRangeFilter, 
+        timeRange: newTimeRange,
         status: "GIVEN",
         givenByUid: "test-uid",
         createdAt: serverTimestamp(),
@@ -323,8 +330,6 @@ export default function MainPageClient() {
     }
   };
 
-  // --- Funciones de Edición ---
-
   const handleEditStudent = (student: Student) => {
     const studentMeds = medications.filter((m) => m.studentId === student.id);
     setEditingStudentId(student.id);
@@ -343,7 +348,6 @@ export default function MainPageClient() {
     try {
       const batch = writeBatch(db);
 
-      // 1. Actualizar datos del estudiante
       const studentRef = doc(db, "students", editingStudentId);
       batch.update(studentRef, {
         firstName: formData.firstName,
@@ -351,21 +355,17 @@ export default function MainPageClient() {
         secondSurname: formData.secondSurname,
       });
 
-      // 2. Sincronizar medicamentos
       const oldMeds = medications.filter((m) => m.studentId === editingStudentId);
       const newMeds = formData.medicationsToAdd;
 
-      // Eliminar medicamentos que ya no están
       for (const oldMed of oldMeds) {
         if (!newMeds.some((newMed) => newMed.id === oldMed.id)) {
           batch.delete(doc(db, "medications", oldMed.id));
         }
       }
 
-      // Actualizar o agregar medicamentos nuevos/editados
       for (const newMed of newMeds) {
         if (newMed.id) {
-          // Actualizar un medicamento existente
           const medRef = doc(db, "medications", newMed.id);
           batch.update(medRef, {
             medicationName: newMed.medicationName,
@@ -377,7 +377,6 @@ export default function MainPageClient() {
             hour: newMed.hour || "",
           });
         } else {
-          // Agregar un medicamento nuevo
           const newMedRef = doc(collection(db, "medications"));
           batch.set(newMedRef, {
             studentId: editingStudentId,
@@ -426,7 +425,6 @@ export default function MainPageClient() {
 
   return (
     <div className="min-h-screen bg-gray-50 p-6 font-sans">
-      {/* Header */}
       <header className="flex flex-col sm:flex-row items-center justify-between mb-6">
         <h1 className="text-3xl font-bold text-gray-800 mb-4 sm:mb-0">
           Administración de Medicamentos
@@ -434,7 +432,7 @@ export default function MainPageClient() {
         <div className="flex gap-2 flex-wrap">
           <button
             onClick={() => {
-              setEditingStudentId(null); // Asegura que el estado sea de creación
+              setEditingStudentId(null);
               setFormData({
                 firstName: "",
                 firstSurname: "",
@@ -456,7 +454,6 @@ export default function MainPageClient() {
         </div>
       </header>
 
-      {/* Filtros */}
       <div className="flex gap-2 flex-wrap mb-6">
         <input
           id="dateFilter"
@@ -500,7 +497,6 @@ export default function MainPageClient() {
         </div>
       </div>
 
-      {/* Lista estudiantes */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {filteredStudents.length === 0 ? (
           <div className="col-span-full text-gray-500 text-center py-10">
@@ -512,16 +508,10 @@ export default function MainPageClient() {
             .map((s) => (
               <div
                 key={s.id}
-                className="bg-white rounded-2xl shadow-md p-4 transition"
+                onClick={() => setSelectedStudent(s)}
+                className="bg-white rounded-2xl shadow-md p-4 transition cursor-pointer"
               >
-                {/* * CAMBIO CRUCIAL AQUÍ: El `onClick` se movió desde el `div`
-                  * al elemento <p> del nombre.
-                  * Esto asegura que el botón "Given" sea clicable.
-                */}
-                <p
-                  onClick={() => setSelectedStudent(s)}
-                  className="font-semibold text-gray-800 mb-2 cursor-pointer hover:underline"
-                >
+                <p className="font-semibold text-gray-800 mb-2">
                   {s.firstSurname} {s.secondSurname}, {s.firstName}
                 </p>
                 <div className="space-y-1">
@@ -551,7 +541,7 @@ export default function MainPageClient() {
                         {!wasGiven ? (
                           <button
                             onClick={(e) => {
-                              e.stopPropagation();
+                              e.stopPropagation(); // Aquí está el fix
                               handleGiven(s, med);
                             }}
                             className="bg-green-500 text-white px-3 py-1 rounded-lg"
@@ -565,7 +555,6 @@ export default function MainPageClient() {
                     );
                   })}
                 </div>
-                {/* BOTONES DE ACCIÓN: EDITAR Y ELIMINAR */}
                 <div className="flex gap-2 mt-2">
                     <button
                         onClick={(e) => {
@@ -591,7 +580,6 @@ export default function MainPageClient() {
         )}
       </div>
 
-      {/* Modal estudiante */}
       {selectedStudent && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white p-6 rounded-2xl shadow-lg w-96 relative max-h-[90vh] overflow-y-auto">
@@ -644,7 +632,6 @@ export default function MainPageClient() {
         </div>
       )}
 
-      {/* Modal crear/editar estudiante */}
       {showForm && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white p-6 rounded-2xl shadow-lg w-96 relative max-h-[90vh] overflow-y-auto">
@@ -775,7 +762,6 @@ export default function MainPageClient() {
                     }}
                     className="border p-2 rounded w-full"
                   />
-                  {/* Botón para eliminar medicamento */}
                   <button
                     onClick={() => {
                       const meds = [...formData.medicationsToAdd];
@@ -807,7 +793,6 @@ export default function MainPageClient() {
         </div>
       )}
 
-      {/* Modal medicamento extra */}
       {showExtraMedForm && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white p-6 rounded-2xl shadow-lg w-96 relative max-h-[90vh] overflow-y-auto">
