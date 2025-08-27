@@ -514,6 +514,10 @@ export default function MainPageClient() {
                 key={s.id}
                 className="bg-white rounded-2xl shadow-md p-4 transition"
               >
+                {/* * CAMBIO CRUCIAL AQUÍ: El `onClick` se movió desde el `div`
+                  * al elemento <p> del nombre.
+                  * Esto asegura que el botón "Given" sea clicable.
+                */}
                 <p
                   onClick={() => setSelectedStudent(s)}
                   className="font-semibold text-gray-800 mb-2 cursor-pointer hover:underline"
