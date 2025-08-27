@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState } from "react";
 import {
   collection,
   query,
@@ -16,7 +16,6 @@ import {
   writeBatch,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import * as htmlToImage from "html-to-image";
 
 // Definimos los tipos para la base de datos para evitar 'any'
 interface Student {
@@ -58,7 +57,7 @@ interface Administration {
 }
 
 type MedicationForm = {
-  id?: string;
+  id?: string; // Hacemos el ID opcional para medicamentos nuevos
   medicationName: string;
   dosage: string;
   timeRanges: string[];
@@ -100,9 +99,6 @@ export default function MainPageClient() {
   });
 
   const [editingStudentId, setEditingStudentId] = useState<string | null>(null);
-
-  // Nuevo: Referencia para el elemento que queremos exportar
-  const studentListRef = useRef<HTMLDivElement>(null);
 
   const mapDocToTypedObject = <T,>(
     doc: QueryDocumentSnapshot<DocumentData, DocumentData>
@@ -427,19 +423,6 @@ export default function MainPageClient() {
     });
   };
 
-  // NUEVA FUNCIÓN PARA EXPORTAR LA LISTA A UNA IMAGEN
-  const exportListAsImage = async () => {
-    if (studentListRef.current) {
-      const dataUrl = await htmlToImage.toPng(studentListRef.current, {
-        backgroundColor: "white",
-      });
-      const link = document.createElement("a");
-      link.download = `meds-${dateFilter}-${timeRangeFilter}.png`;
-      link.href = dataUrl;
-      link.click();
-    }
-  };
-
   return (
     <div className="min-h-screen bg-gray-50 p-6 font-sans">
       <header className="flex flex-col sm:flex-row items-center justify-between mb-6">
@@ -467,13 +450,6 @@ export default function MainPageClient() {
             className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-xl shadow transition"
           >
             + Agregar Medicamento Extra
-          </button>
-          {/* Nuevo botón para exportar */}
-          <button
-            onClick={exportListAsImage}
-            className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-xl shadow transition"
-          >
-            Exportar Lista
           </button>
         </div>
       </header>
@@ -521,8 +497,7 @@ export default function MainPageClient() {
         </div>
       </div>
 
-      {/* Nuevo: Añadir la referencia al contenedor que se va a exportar */}
-      <div ref={studentListRef} className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {filteredStudents.length === 0 ? (
           <div className="col-span-full text-gray-500 text-center py-10">
             No hay estudiantes para mostrar.
@@ -566,7 +541,7 @@ export default function MainPageClient() {
                         {!wasGiven ? (
                           <button
                             onClick={(e) => {
-                              e.stopPropagation();
+                              e.stopPropagation(); // Aquí está el fix
                               handleGiven(s, med);
                             }}
                             className="bg-green-500 text-white px-3 py-1 rounded-lg"
