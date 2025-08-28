@@ -17,6 +17,8 @@ import {
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import * as htmlToImage from "html-to-image";
+import jsPDF from 'jspdf';
+import 'jspdf-autotable';
 
 // Definimos los tipos para la base de datos para evitar 'any'
 interface Student {
@@ -101,6 +103,12 @@ export default function MainPageClient() {
   });
 
   const [editingStudentId, setEditingStudentId] = useState<string | null>(null);
+  
+  // NUEVOS ESTADOS PARA MEDICAMENTOS SOS
+  const [sosAdmins, setSosAdmins] = useState<Administration[]>([]);
+  const [showSosModal, setShowSosModal] = useState(false);
+  const [pdfDate, setPdfDate] = useState<string>('');
+
 
   // Nuevo: Referencia para el elemento que queremos exportar
   const studentListRef = useRef<HTMLDivElement>(null);
@@ -143,6 +151,21 @@ export default function MainPageClient() {
       );
     });
   }, []);
+  
+  // NUEVO useEffect para buscar administraciones SOS
+  useEffect(() => {
+    if (showSosModal) {
+      const q = query(
+        collection(db, 'administrations'),
+        where('timeRange', '==', 'SOS')
+      );
+      const unsubscribe = onSnapshot(q, (snapshot) => {
+        setSosAdmins(snapshot.docs.map(doc => mapDocToTypedObject<Administration>(doc)));
+      });
+
+      return () => unsubscribe();
+    }
+  }, [showSosModal]);
 
   const handleGiven = async (student: Student, med: Medication) => {
     try {
@@ -441,6 +464,36 @@ export default function MainPageClient() {
       link.click();
     }
   };
+  
+  // NUEVA FUNCIÓN PARA EXPORTAR LA LISTA DE SOS A PDF
+  const exportSosAsPdf = () => {
+    const doc = new jsPDF();
+    
+    const columns = [
+      { header: 'Fecha', dataKey: 'date' },
+      { header: 'Hora', dataKey: 'hour' },
+      { header: 'Estudiante', dataKey: 'studentFullNameSortable' },
+      { header: 'Medicamento', dataKey: 'medicationName' },
+      { header: 'Dosis', dataKey: 'dosage' },
+      { header: 'Observaciones', dataKey: 'notes' }
+    ];
+
+    const rows = sosAdmins.map(admin => ({
+      date: admin.date,
+      hour: admin.hour,
+      studentFullNameSortable: admin.studentFullNameSortable,
+      medicationName: admin.medicationName,
+      dosage: admin.dosage,
+      notes: medications.find(m => m.id === admin.medicationId)?.notes || ''
+    }));
+    
+    doc.autoTable({
+      head: [columns.map(c => c.header)],
+      body: rows.map(r => columns.map(c => r[c.dataKey])),
+    });
+
+    doc.save(`SOS al ${pdfDate}.pdf`);
+  };
 
   return (
     <div className="min-h-screen bg-gray-50 p-6 font-sans">
@@ -476,6 +529,16 @@ export default function MainPageClient() {
             className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-xl shadow transition"
           >
             Exportar Lista
+          </button>
+          {/* NUEVO BOTÓN PARA VER MEDICAMENTOS SOS */}
+          <button
+            onClick={() => {
+              setShowSosModal(true);
+              setPdfDate(new Date().toISOString().split('T')[0]);
+            }}
+            className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-xl shadow transition"
+          >
+            Ver Medicamentos SOS
           </button>
         </div>
       </header>
@@ -928,6 +991,53 @@ export default function MainPageClient() {
             >
               Guardar
             </button>
+          </div>
+        </div>
+      )}
+      
+      {/* NUEVO MODAL PARA MEDICAMENTOS SOS */}
+      {showSosModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-2xl shadow-lg w-full max-w-4xl relative max-h-[90vh] overflow-y-auto">
+            <button
+              onClick={() => setShowSosModal(false)}
+              className="absolute top-2 right-2 text-gray-500 hover:text-black"
+            >
+              ✕
+            </button>
+            <h2 className="text-xl font-bold mb-4">Medicamentos SOS Administrados</h2>
+            
+            <button
+              onClick={exportSosAsPdf}
+              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl shadow transition mb-4"
+            >
+              Descargar PDF
+            </button>
+            
+            <table className="min-w-full bg-white border border-gray-200">
+              <thead>
+                <tr>
+                  <th className="py-2 px-4 border-b">Fecha</th>
+                  <th className="py-2 px-4 border-b">Hora</th>
+                  <th className="py-2 px-4 border-b">Estudiante</th>
+                  <th className="py-2 px-4 border-b">Medicamento</th>
+                  <th className="py-2 px-4 border-b">Dosis</th>
+                  <th className="py-2 px-4 border-b">Observaciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sosAdmins.sort((a, b) => a.date.localeCompare(b.date) || a.hour.localeCompare(b.hour)).map((admin) => (
+                  <tr key={admin.id}>
+                    <td className="py-2 px-4 border-b">{admin.date}</td>
+                    <td className="py-2 px-4 border-b">{admin.hour}</td>
+                    <td className="py-2 px-4 border-b">{admin.studentFullNameSortable}</td>
+                    <td className="py-2 px-4 border-b">{admin.medicationName}</td>
+                    <td className="py-2 px-4 border-b">{admin.dosage}</td>
+                    <td className="py-2 px-4 border-b">{medications.find(m => m.id === admin.medicationId)?.notes || ''}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
       )}
