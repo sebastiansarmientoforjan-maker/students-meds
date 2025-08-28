@@ -487,6 +487,7 @@ export default function MainPageClient() {
       notes: medications.find(m => m.id === admin.medicationId)?.notes || ''
     }));
     
+    // @ts-ignore
     doc.autoTable({
       head: [columns.map(c => c.header)],
       body: rows.map(r => columns.map(c => r[c.dataKey])),
